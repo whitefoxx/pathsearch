@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <meta charset="utf-8" />
+    <title>Canvas tutorial</title>
+    <script>
+      function draw() {
+        const canvas = document.getElementById("ex0");
+        if (!canvas.getContext) {
+          console.error("canvas not supported!");
+        }
+
+        const ctx = canvas.getContext("2d");
+
+        ctx.fillStyle = "rgb(200, 0, 0)";
+        ctx.fillRect(10, 10, 50, 50);
+
+        ctx.fillStyle = "rgba(0, 0, 200, 0.5)";
+        ctx.fillRect(30, 30, 50, 50);
+
+        ctx.fillRect(125, 125, 100, 100);
+        ctx.clearRect(145, 145, 60, 60);
+        ctx.strokeRect(150, 150, 50, 50);
+
+        ctx.beginPath();
+        ctx.moveTo(100, 10);
+        ctx.lineTo(100, 100);
+        ctx.lineTo(180, 100);
+        ctx.closePath();
+        ctx.stroke();
+        ctx.fill();
+
+        draw1();
+        draw2();
+        draw3();
+      }
+
+      function draw1() {
+        const canvas = document.getElementById("ex1");
+        const ctx = canvas.getContext("2d");
+        ctx.beginPath();
+        ctx.arc(75, 75, 50, 0, Math.PI * 2, true); // Outer circle
+        ctx.moveTo(110, 75);
+        ctx.arc(75, 75, 35, 0, Math.PI, false); // Mouth (clockwise)
+        ctx.moveTo(65, 65);
+        ctx.arc(60, 65, 5, 0, Math.PI * 2, true); // Left eye
+        ctx.moveTo(95, 65);
+        ctx.arc(90, 65, 5, 0, Math.PI * 2, true); // Right eye
+        ctx.stroke();
+      }
+
+      function draw2() {
+        const canvas = document.getElementById("ex2");
+        const ctx = canvas.getContext("2d");
+
+        let path1 = new Path2D();
+        path1.rect(10, 10, 100, 100);
+
+        let path2 = new Path2D(path1);
+        path2.moveTo(220, 60);
+        path2.arc(170, 60, 50, 0, 2 * Math.PI);
+
+        ctx.stroke(path2);
+
+        ctx.fillStyle = "rgba(0, 0, 200, 0.5)";
+        ctx.fill(path2);
+
+        let svgPath = new Path2D("M80 80 h 80 v 80 h -80 Z");
+        ctx.fill(svgPath);
+      }
+    </script>
+    <style>
+      canvas {
+        border: 1px solid black;
+      }
+    </style>
+  </head>
+  <body onload="draw();">
+    <canvas id="ex0" width="300" height="300"></canvas>
+    <canvas id="ex1" width="300" height="300"></canvas>
+    <canvas id="ex2" width="300" height="300"></canvas>
+    <canvas id="ex3" width="300" height="300"></canvas>
+  </body>
+</html>

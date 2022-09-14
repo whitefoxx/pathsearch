@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <meta charset="utf-8" />
+    <title>Canvas tutorial</title>
+    <style>
+      body {
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+    </style>
+    <script>
+      class Block {
+        constructor(column, row) {
+          this.column = column;
+          this.row = row;
+        }
+
+        toString() {
+          return `${this.column},${this.row}`;
+        }
+
+        isAt(c, r) {
+          return this.column == c && this.row == r;
+        }
+      }
+
+      const obstacles = new Set();
+      let startBlock;
+      let destBlock;
+
+      function pathsearch() {
+        const columns = 20;
+        const rows = 20;
+
+        draw(columns, rows);
+      }
+
+      function draw(columns, rows) {
+        const canvas = document.getElementById("map");
+        if (!canvas.getContext) {
+          console.error("canvas not supported!");
+        }
+
+        const blockSize = 30; // block size
+        const lineWidth = 1;
+        const startX = 10;
+        const startY = 10;
+        canvas.width = startX + blockSize * columns + lineWidth;
+        canvas.height = startY + blockSize * rows + lineWidth;
+
+        const ctx = canvas.getContext("2d");
+        ctx.lineWidth = lineWidth;
+
+        function drawGrid(ctx, x, y, columns, rows, blockSize) {
+          const maxX = x + columns * blockSize;
+          const maxY = y + rows * blockSize;
+          ctx.beginPath();
+          for (let i = 0; i <= columns; i++) {
+            ctx.moveTo(x + i * blockSize, y);
+            ctx.lineTo(x + i * blockSize, maxY);
+          }
+          for (let i = 0; i <= rows; i++) {
+            ctx.moveTo(x, y + i * blockSize);
+            ctx.lineTo(maxX, y + i * blockSize);
+          }
+          ctx.stroke();
+        }
+
+        function clearRectAtPoint(x, y) {
+          ctx.clearRect(
+            x + lineWidth,
+            y + lineWidth,
+            blockSize - 2 * lineWidth,
+            blockSize - 2 * lineWidth
+          );
+        }
+
+        function fillRectAtPoint(x, y, fillStyle) {
+          ctx.fillStyle = fillStyle;
+          ctx.fillRect(
+            x + lineWidth,
+            y + lineWidth,
+            blockSize - 2 * lineWidth,
+            blockSize - 2 * lineWidth
+          );
+        }
+
+        function click(e) {
+          if (e.shiftKey) {
+            shiftclick(e);
+          } else {
+            const column = Math.floor((e.clientX - startX) / blockSize);
+            const row = Math.floor((e.clientY - startY) / blockSize);
+            const x = column * blockSize + startX;
+            const y = row * blockSize + startY;
+            if (
+              (startBlock && startBlock.isAt(column, row)) ||
+              (destBlock && destBlock.isAt(column, row))
+            ) {
+              return;
+            }
+            if (obstacles.has(`${column},${row}`)) {
+              clearRectAtPoint(x, y);
+              obstacles.delete(`${column},${row}`);
+            } else {
+              fillRectAtPoint(x, y, "rgba(0, 0, 200, 0.5)");
+              obstacles.add(`${column},${row}`);
+            }
+          }
+        }
+
+        function shiftclick(e) {
+          const column = Math.floor((e.clientX - startX) / blockSize);
+          const row = Math.floor((e.clientY - startY) / blockSize);
+          const x = column * blockSize + startX;
+          const y = row * blockSize + startY;
+          if (!obstacles.has(`${column},${row}`)) {
+            if (startBlock && startBlock.isAt(column, row)) {
+              clearRectAtPoint(x, y);
+              startBlock = undefined;
+            } else if (destBlock && destBlock.isAt(column, row)) {
+              clearRectAtPoint(x, y);
+              destBlock = undefined;
+            } else if (!startBlock) {
+              startBlock = new Block(column, row);
+              fillRectAtPoint(x, y, "rgba(0, 200, 0, 0.5)");
+            } else if (!destBlock) {
+              destBlock = new Block(column, row);
+              fillRectAtPoint(x, y, "rgba(200, 0, 0, 0.5)");
+            }
+          }
+        }
+
+        drawGrid(ctx, startX, startY, columns, rows, blockSize);
+        canvas.addEventListener("click", click);
+      }
+    </script>
+  </head>
+  <body onload="pathsearch();">
+    <canvas id="map" width="300" height="300"></canvas>
+  </body>
+</html>
