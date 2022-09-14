@@ -10,30 +10,185 @@
       }
     </style>
     <script>
-      class Block {
-        constructor(column, row) {
-          this.column = column;
-          this.row = row;
+      class Node {
+        constructor(x, y) {
+          this.x = x;
+          this.y = y;
+          this.parent = undefined;
+          this.pathD = Infinity;
+          this.heuristicD = Infinity;
+          this.key = `${this.x},${this.y}`;
         }
 
-        toString() {
-          return `${this.column},${this.row}`;
+        isAt(x, y) {
+          return this.x == x && this.y == y;
         }
 
-        isAt(c, r) {
-          return this.column == c && this.row == r;
+        equal(node) {
+          return this.x == node.x && this.y == node.y;
+        }
+
+        neighborCoords() {
+          const coords = new Array();
+          coords.push([this.x - 1, this.y - 1]);
+          coords.push([this.x, this.y - 1]);
+          coords.push([this.x + 1, this.y - 1]);
+          coords.push([this.x - 1, this.y]);
+          coords.push([this.x + 1, this.y]);
+          coords.push([this.x - 1, this.y + 1]);
+          coords.push([this.x, this.y + 1]);
+          coords.push([this.x + 1, this.y + 1]);
+          return coords;
         }
       }
 
-      const obstacles = new Set();
-      let startBlock;
-      let destBlock;
+      class NodeSet {
+        constructor() {
+          this.map = new Map();
+        }
+
+        add(node) {
+          this.map.set(node.key, node);
+        }
+
+        pop() {
+          let m = Infinity;
+          let node;
+          this.map.forEach((n, k) => {
+            if (n.pathD + n.heuristicD < m) {
+              m = n.pathD + n.heuristicD;
+              node = n;
+            }
+          });
+          if (node) this.map.delete(node.key);
+          return node;
+        }
+
+        has(node) {
+          return this.map.has(node.key);
+        }
+
+        get(key) {
+          return this.map.get(key);
+        }
+
+        delete(node) {
+          this.map.delete(node.key);
+        }
+      }
+
+      let startNode;
+      let destNode;
+
+      const columns = 45;
+      const rows = 20;
+      const nodeSize = 30; // node size
+      const lineWidth = 1;
+      const startX = 10;
+      const startY = 10;
+
+      const sqrt2 = Math.sqrt(2);
+      const openSet = new NodeSet();
+      const closeSet = new NodeSet();
+      const obstacleSet = new NodeSet();
 
       function pathsearch() {
-        const columns = 20;
-        const rows = 20;
-
         draw(columns, rows);
+
+        const astarBtn = document.getElementById("Astar");
+        astarBtn.onclick = (e) => {
+          console.log("click astar button");
+          const found = astar();
+          console.log("found a path or not?", found);
+          if (found) {
+            let node = destNode;
+            while (node.parent) {
+              drawNode(node);
+              node = node.parent;
+            }
+          }
+        };
+      }
+
+      function astar() {
+        startNode.parent = undefined;
+        startNode.pathD = 0;
+        startNode.heuristicD = heuristic(startNode, destNode);
+        openSet.add(startNode);
+
+        while (true) {
+          let node = openSet.pop();
+          if (!node) return false;
+          closeSet.add(node);
+          if (node.equal(destNode)) {
+            destNode = node;
+            return true;
+          }
+          node.neighborCoords().forEach((coord) => {
+            const k = `${coord[0]},${coord[1]}`;
+            let nb;
+            if (
+              coord[0] < 0 ||
+              coord[0] >= columns ||
+              coord[1] < 0 ||
+              coord[1] >= rows
+            ) {
+            } else if (!isOkToMove(node.x, node.y, coord[0], coord[1])) {
+            } else if ((nb = closeSet.get(k))) {
+            } else if ((nb = openSet.get(k))) {
+              const d = neighborDistance(node, nb);
+              if (node.pathD + d < nb.pathD) {
+                nb.parent = node;
+                nb.pathD = node.pathD + d;
+              }
+            } else {
+              nb = new Node(coord[0], coord[1]);
+              const d = neighborDistance(node, nb);
+              nb.pathD = node.pathD + d;
+              nb.heuristicD = heuristic(nb, destNode);
+              nb.parent = node;
+              openSet.add(nb);
+            }
+          });
+        }
+      }
+
+      function isOkToMove(x1, y1, x2, y2) {
+        const k = `${x2},${y2}`;
+        if (obstacleSet.get(k)) return false;
+        const d = Math.abs(x1 - x2) + Math.abs(y1 - y2);
+        if (d == 1) return true;
+        if (d > 2) return false;
+        const k1 = `${x1},${y2}`;
+        const k2 = `${x2},${y1}`;
+        return !obstacleSet.get(k1) && !obstacleSet.get(k2);
+      }
+
+      function heuristic(from, to) {
+        const dx = Math.abs(from.x - to.x);
+        const dy = Math.abs(from.y - to.y);
+        return dx + dy - (2 - sqrt2) * Math.min(dx, dy);
+      }
+
+      function neighborDistance(a, b) {
+        const dx = Math.abs(a.x - b.x);
+        const dy = Math.abs(a.y - b.y);
+        const d = Math.sqrt(Math.pow(dx, 2) + Math.pow(dy, 2));
+        return d;
+      }
+
+      function drawNode(node) {
+        const canvas = document.getElementById("map");
+        const ctx = canvas.getContext("2d");
+        const x = node.x * nodeSize + startX;
+        const y = node.y * nodeSize + startY;
+        ctx.fillStyle = "rgba(100, 0, 200, 0.5)";
+        ctx.fillRect(
+          x + lineWidth,
+          y + lineWidth,
+          nodeSize - 2 * lineWidth,
+          nodeSize - 2 * lineWidth
+        );
       }
 
       function draw(columns, rows) {
@@ -42,27 +197,23 @@
           console.error("canvas not supported!");
         }
 
-        const blockSize = 30; // block size
-        const lineWidth = 1;
-        const startX = 10;
-        const startY = 10;
-        canvas.width = startX + blockSize * columns + lineWidth;
-        canvas.height = startY + blockSize * rows + lineWidth;
+        canvas.width = startX + nodeSize * columns + lineWidth;
+        canvas.height = startY + nodeSize * rows + lineWidth;
 
         const ctx = canvas.getContext("2d");
         ctx.lineWidth = lineWidth;
 
-        function drawGrid(ctx, x, y, columns, rows, blockSize) {
-          const maxX = x + columns * blockSize;
-          const maxY = y + rows * blockSize;
+        function drawGrid(ctx, x, y, columns, rows, nodeSize) {
+          const maxX = x + columns * nodeSize;
+          const maxY = y + rows * nodeSize;
           ctx.beginPath();
           for (let i = 0; i <= columns; i++) {
-            ctx.moveTo(x + i * blockSize, y);
-            ctx.lineTo(x + i * blockSize, maxY);
+            ctx.moveTo(x + i * nodeSize, y);
+            ctx.lineTo(x + i * nodeSize, maxY);
           }
           for (let i = 0; i <= rows; i++) {
-            ctx.moveTo(x, y + i * blockSize);
-            ctx.lineTo(maxX, y + i * blockSize);
+            ctx.moveTo(x, y + i * nodeSize);
+            ctx.lineTo(maxX, y + i * nodeSize);
           }
           ctx.stroke();
         }
@@ -71,8 +222,8 @@
           ctx.clearRect(
             x + lineWidth,
             y + lineWidth,
-            blockSize - 2 * lineWidth,
-            blockSize - 2 * lineWidth
+            nodeSize - 2 * lineWidth,
+            nodeSize - 2 * lineWidth
           );
         }
 
@@ -81,8 +232,8 @@
           ctx.fillRect(
             x + lineWidth,
             y + lineWidth,
-            blockSize - 2 * lineWidth,
-            blockSize - 2 * lineWidth
+            nodeSize - 2 * lineWidth,
+            nodeSize - 2 * lineWidth
           );
         }
 
@@ -90,54 +241,60 @@
           if (e.shiftKey) {
             shiftclick(e);
           } else {
-            const column = Math.floor((e.clientX - startX) / blockSize);
-            const row = Math.floor((e.clientY - startY) / blockSize);
-            const x = column * blockSize + startX;
-            const y = row * blockSize + startY;
+            const column = Math.floor((e.clientX - startX) / nodeSize);
+            const row = Math.floor((e.clientY - startY) / nodeSize);
+            const x = column * nodeSize + startX;
+            const y = row * nodeSize + startY;
             if (
-              (startBlock && startBlock.isAt(column, row)) ||
-              (destBlock && destBlock.isAt(column, row))
+              (startNode && startNode.isAt(column, row)) ||
+              (destNode && destNode.isAt(column, row))
             ) {
               return;
             }
-            if (obstacles.has(`${column},${row}`)) {
+
+            const node = new Node(column, row);
+            if (obstacleSet.has(node)) {
               clearRectAtPoint(x, y);
-              obstacles.delete(`${column},${row}`);
+              obstacleSet.delete(node);
             } else {
               fillRectAtPoint(x, y, "rgba(0, 0, 200, 0.5)");
-              obstacles.add(`${column},${row}`);
+              obstacleSet.add(node);
             }
           }
         }
 
         function shiftclick(e) {
-          const column = Math.floor((e.clientX - startX) / blockSize);
-          const row = Math.floor((e.clientY - startY) / blockSize);
-          const x = column * blockSize + startX;
-          const y = row * blockSize + startY;
-          if (!obstacles.has(`${column},${row}`)) {
-            if (startBlock && startBlock.isAt(column, row)) {
+          const column = Math.floor((e.clientX - startX) / nodeSize);
+          const row = Math.floor((e.clientY - startY) / nodeSize);
+          const x = column * nodeSize + startX;
+          const y = row * nodeSize + startY;
+          const node = new Node(column, row);
+          if (!obstacleSet.has(node)) {
+            if (startNode && startNode.isAt(column, row)) {
               clearRectAtPoint(x, y);
-              startBlock = undefined;
-            } else if (destBlock && destBlock.isAt(column, row)) {
+              startNode = undefined;
+            } else if (destNode && destNode.isAt(column, row)) {
               clearRectAtPoint(x, y);
-              destBlock = undefined;
-            } else if (!startBlock) {
-              startBlock = new Block(column, row);
+              destNode = undefined;
+            } else if (!startNode) {
+              startNode = new Node(column, row);
               fillRectAtPoint(x, y, "rgba(0, 200, 0, 0.5)");
-            } else if (!destBlock) {
-              destBlock = new Block(column, row);
+            } else if (!destNode) {
+              destNode = new Node(column, row);
               fillRectAtPoint(x, y, "rgba(200, 0, 0, 0.5)");
             }
           }
         }
 
-        drawGrid(ctx, startX, startY, columns, rows, blockSize);
+        drawGrid(ctx, startX, startY, columns, rows, nodeSize);
         canvas.addEventListener("click", click);
       }
     </script>
   </head>
   <body onload="pathsearch();">
     <canvas id="map" width="300" height="300"></canvas>
+    <div>
+      <button id="Astar">Astar</button>
+    </div>
   </body>
 </html>
