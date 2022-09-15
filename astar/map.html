@@ -20,6 +20,12 @@
           this.key = `${this.x},${this.y}`;
         }
 
+        reset() {
+          this.parent = undefined;
+          this.pathD = Infinity;
+          this.heuristicD = Infinity;
+        }
+
         isAt(x, y) {
           return this.x == x && this.y == y;
         }
@@ -45,6 +51,10 @@
       class NodeSet {
         constructor() {
           this.map = new Map();
+        }
+
+        clear() {
+          this.map.clear();
         }
 
         add(node) {
@@ -77,9 +87,6 @@
         }
       }
 
-      let startNode;
-      let destNode;
-
       const columns = 45;
       const rows = 20;
       const nodeSize = 30; // node size
@@ -87,25 +94,47 @@
       const startX = 10;
       const startY = 10;
 
-      const sqrt2 = Math.sqrt(2);
       const openSet = new NodeSet();
       const closeSet = new NodeSet();
       const obstacleSet = new NodeSet();
 
-      function pathsearch() {
+      let startNode;
+      let destNode;
+      let found = false;
+      function searchPath() {
         draw(columns, rows);
 
         const astarBtn = document.getElementById("Astar");
         astarBtn.onclick = (e) => {
-          console.log("click astar button");
-          const found = astar();
-          console.log("found a path or not?", found);
           if (found) {
-            let node = destNode;
+            alert("请刷新页面重新开始，或清除路径");
+            return;
+          }
+          found = astar();
+          if (found) {
+            let node = destNode.parent;
             while (node.parent) {
               drawNode(node);
               node = node.parent;
             }
+          } else {
+            alert("找不到路径，请清除障碍或重新设置起点终点再试！");
+          }
+        };
+
+        const clearBtn = document.getElementById("clearPath");
+        clearBtn.onclick = (e) => {
+          if (found) {
+            let node = destNode.parent;
+            while (node.parent) {
+              clearNode(node);
+              node = node.parent;
+            }
+            found = false;
+            openSet.clear();
+            closeSet.clear();
+            startNode.reset();
+            destNode.reset();
           }
         };
       }
@@ -164,6 +193,7 @@
         return !obstacleSet.get(k1) && !obstacleSet.get(k2);
       }
 
+      const sqrt2 = Math.sqrt(2);
       function heuristic(from, to) {
         const dx = Math.abs(from.x - to.x);
         const dy = Math.abs(from.y - to.y);
@@ -184,6 +214,19 @@
         const y = node.y * nodeSize + startY;
         ctx.fillStyle = "rgba(100, 0, 200, 0.5)";
         ctx.fillRect(
+          x + lineWidth,
+          y + lineWidth,
+          nodeSize - 2 * lineWidth,
+          nodeSize - 2 * lineWidth
+        );
+      }
+
+      function clearNode(node) {
+        const canvas = document.getElementById("map");
+        const ctx = canvas.getContext("2d");
+        const x = node.x * nodeSize + startX;
+        const y = node.y * nodeSize + startY;
+        ctx.clearRect(
           x + lineWidth,
           y + lineWidth,
           nodeSize - 2 * lineWidth,
@@ -238,6 +281,10 @@
         }
 
         function click(e) {
+          if (found) {
+            alert("请刷新页面重新开始，或清除路径");
+            return;
+          }
           if (e.shiftKey) {
             shiftclick(e);
           } else {
@@ -291,10 +338,14 @@
       }
     </script>
   </head>
-  <body onload="pathsearch();">
+  <body onload="searchPath();">
     <canvas id="map" width="300" height="300"></canvas>
-    <div>
-      <button id="Astar">Astar</button>
+    <div style="margin: 10px">
+      <button id="Astar">寻找路径</button>
+      <button id="clearPath">清除路径</button>
+      <p>
+        单击空白格子设置障碍，已设置障碍为蓝色，单击蓝色障碍可清除障碍，shift+click设置起点（绿色）和终点（红色），shift+click起点和终点取消。
+      </p>
     </div>
   </body>
 </html>
