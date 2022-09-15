@@ -15,8 +15,8 @@
           this.x = x;
           this.y = y;
           this.parent = undefined;
-          this.pathD = Infinity;
-          this.heuristicD = Infinity;
+          this.pathD = Infinity; // 起点到这个点的实际距离
+          this.heuristicD = Infinity; // 这个点到终点的启发函数计算出来的估计距离
           this.key = `${this.x},${this.y}`;
         }
 
@@ -119,6 +119,10 @@
             }
           } else {
             alert("找不到路径，请清除障碍或重新设置起点终点再试！");
+            openSet.clear();
+            closeSet.clear();
+            startNode.reset();
+            destNode.reset();
           }
         };
 
@@ -193,11 +197,12 @@
         return !obstacleSet.get(k1) && !obstacleSet.get(k2);
       }
 
-      const sqrt2 = Math.sqrt(2);
+      // 对角线走位的距离，这个值大一点（不能大于2）可能会更走直线一点
+      const diagonalMoveD = Math.sqrt(3);
       function heuristic(from, to) {
         const dx = Math.abs(from.x - to.x);
         const dy = Math.abs(from.y - to.y);
-        return dx + dy - (2 - sqrt2) * Math.min(dx, dy);
+        return dx + dy - (2 - diagonalMoveD) * Math.min(dx, dy);
       }
 
       function neighborDistance(a, b) {
