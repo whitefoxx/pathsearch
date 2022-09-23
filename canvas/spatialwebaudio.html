@@ -1,0 +1,1046 @@
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <meta charset="utf-8" />
+    <title>spatialized webaudio</title>
+    <script>
+      /*
+        1. 鼠标点击设置头像位置，第一个头像为自己黑色，除自己外每个头像都关联一个audio文件；
+        2. 点击头像会选中头像（再次点击会取消选中），然后再点击下方控制按钮可以暂停或者打开audio；
+        3. 点击选中头像，然后再shift+click可以设置选中头像移动到的位置，再按空格键开始移动，再次按空格会暂停移动；
+        4. 静止或者移动过程中，可以听到声音的不同变化（建议戴耳机更明显）
+      */
+      let canvas;
+      let ctx;
+      const avatars = new Array();
+      let songs;
+      let moveTo;
+      const avatarR = 30;
+      const strokeStyle = "rgb(255, 0, 0)";
+      let keepMoving = false;
+
+      function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      }
+
+      function getTheSelectedAvatar() {
+        for (let i = 0; i < avatars.length; i++) {
+          if (avatars[i].selected) return avatars[i];
+        }
+      }
+
+      function randomStyle() {
+        const r = Math.floor(Math.random() * 255);
+        const g = Math.floor(Math.random() * 255);
+        const b = Math.floor(Math.random() * 255);
+        return `rgba(${r}, ${g}, ${b}, 0.6)`;
+      }
+
+      function doDrawAvatar(x, y, fillStyle) {
+        ctx.beginPath();
+        ctx.arc(x, y, avatarR, 0, Math.PI * 2, true);
+        ctx.fillStyle = fillStyle;
+        ctx.fill();
+      }
+
+      function doDrawCircle(x, y, strokeStyle) {
+        ctx.beginPath();
+        ctx.lineWidth = 2;
+        ctx.arc(x, y, avatarR - ctx.lineWidth / 2, 0, Math.PI * 2, true);
+        ctx.strokeStyle = strokeStyle;
+        ctx.stroke();
+      }
+
+      function doDrawPlayIcon(x, y) {
+        ctx.beginPath();
+        const r = 20;
+        ctx.moveTo(x - r * 0.5, y - r * 0.866);
+        ctx.lineTo(x + r, y);
+        ctx.lineTo(x - r * 0.5, y + r * 0.866);
+        ctx.fill();
+      }
+
+      function doDrawPauseIcon(x, y) {
+        ctx.beginPath();
+        const r = 15;
+        ctx.fillRect(x - r, y - r, 2 * r, 2 * r);
+      }
+
+      function redrawAllAvatars() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        avatars.forEach(({ x, y, audio, selected, style, moveTo }) => {
+          doDrawAvatar(x, y, style);
+          if (audio) {
+            if (audio.paused) doDrawPauseIcon(x, y);
+            else doDrawPlayIcon(x, y);
+          }
+          if (moveTo) {
+            doDrawCircle(moveTo.x, moveTo.y, style);
+          }
+          if (selected) doDrawCircle(x, y, strokeStyle);
+        });
+      }
+
+      function drawMoveTo(x, y, style) {
+        const r = avatarR;
+        for (let i = 0; i < avatars.length; i++) {
+          const ax = avatars[i].x;
+          const ay = avatars[i].y;
+          let d2 = Math.pow(x - ax, 2) + Math.pow(y - ay, 2);
+          if (d2 < r * r) {
+            return false;
+          }
+          if (avatars[i].moveTo) {
+            const mx = avatars[i].moveTo.x;
+            const my = avatars[i].moveTo.y;
+            d2 = Math.pow(x - mx, 2) + Math.pow(y - my, 2);
+            if (d2 < r * r) {
+              return false;
+            }
+          }
+        }
+        doDrawCircle(x, y, style);
+        return true;
+      }
+
+      function drawAvatarOrSelect(x, y) {
+        const r = avatarR;
+        for (let i = 0; i < avatars.length; i++) {
+          const ax = avatars[i].x;
+          const ay = avatars[i].y;
+          let d2 = Math.pow(x - ax, 2) + Math.pow(y - ay, 2);
+          if (d2 < r * r) {
+            doDrawCircle(ax, ay, strokeStyle);
+            avatars[i].selected = true;
+            if (avatars[i].audio) {
+              showAudio(avatars[i].audio, avatars[i].style);
+            }
+            return false;
+          }
+          if (avatars[i].moveTo) {
+            const mx = avatars[i].moveTo.x;
+            const my = avatars[i].moveTo.y;
+            d2 = Math.pow(x - mx, 2) + Math.pow(y - my, 2);
+            if (d2 < r * r) {
+              return false;
+            }
+          }
+        }
+        let style;
+        // 第一个avatar表示用户自己，比较特殊，设置为黑色，且不会绑定audio
+        if (avatars.length == 0) {
+          style = "black";
+        } else {
+          style = randomStyle();
+        }
+        doDrawAvatar(x, y, style);
+        avatars.push({
+          x,
+          y,
+          selected: false,
+          style,
+          moveTo: undefined,
+          audio: undefined,
+          audioSource: undefined,
+          audioCtx: undefined,
+          panNode: undefined,
+        });
+        return true;
+      }
+
+      function moving() {
+        if (!keepMoving) return;
+        const speed = 2; // 控制移动速度
+        let goOn = false;
+        for (let i = 0; i < avatars.length; i++) {
+          const avatar = avatars[i];
+          if (avatar.moveTo) {
+            const { x, y } = avatar;
+            const mx = avatar.moveTo.x;
+            const my = avatar.moveTo.y;
+            const d = Math.sqrt(Math.pow(x - mx, 2) + Math.pow(y - my, 2));
+            if (d <= 5) {
+              avatar.moveTo = undefined;
+              avatar.x = mx;
+              avatar.y = my;
+            } else {
+              avatar.x += (speed * (mx - x)) / d;
+              avatar.y += (speed * (my - y)) / d;
+            }
+            goOn = true;
+          }
+        }
+
+        if (goOn) {
+          redrawAllAvatars(); // 重画canvas
+          adjustSpatializationAudios(); // 调整audio的左右声道和音量大小
+          window.requestAnimationFrame(moving);
+        }
+        keepMoving = goOn;
+      }
+
+      function click(e) {
+        const r = avatarR;
+        const avatar = getTheSelectedAvatar();
+        // 已有选中avatar，通过click或shift+click来取消选中，选择其他avatar或者设置移动目的
+        if (avatar) {
+          const { x, y, style } = avatar;
+          let d2 = Math.pow(x - e.clientX, 2) + Math.pow(y - e.clientY, 2);
+          if (d2 < r * r) {
+            // 单击已选中的avatar表示取消选中
+            avatar.selected = false;
+            redrawAllAvatars();
+          } else if (e.shiftKey) {
+            // shift+click设置选中avatar的移动目的
+            if (drawMoveTo(e.clientX, e.clientY, style)) {
+              avatar.moveTo = { x: e.clientX, y: e.clientY };
+              avatar.selected = false;
+              redrawAllAvatars();
+            }
+          } else {
+            for (let i = 0; i < avatars.length; i++) {
+              const ax = avatars[i].x;
+              const ay = avatars[i].y;
+              let d2 =
+                Math.pow(e.clientX - ax, 2) + Math.pow(e.clientY - ay, 2);
+              if (d2 < r * r) {
+                // 选中其他avatar
+                avatar.selected = false;
+                avatars[i].selected = true;
+                redrawAllAvatars();
+                if (avatars[i].audio) {
+                  showAudio(avatars[i].audio, avatars[i].style);
+                }
+              }
+            }
+          }
+        }
+        // 没有已选中avatar，单击表示新画一个avatar
+        else if (drawAvatarOrSelect(e.clientX, e.clientY)) {
+          if (avatars.length > 1) {
+            const elementId = `audio${e.clientX}-${e.clientY}`;
+            const audio = createAudioElement(elementId);
+            avatars[avatars.length - 1].audio = audio;
+            adjustSpatializationAudios();
+          }
+        }
+      }
+
+      function createAudioElement(elementId) {
+        let song = songs[Math.floor(Math.random() * songs.length)];
+
+        let audio = document.createElement("audio");
+        audio.setAttribute("id", elementId);
+        audio.setAttribute("title", song.name);
+        audio.setAttribute("controls", "");
+        audio.setAttribute("autoplay", "");
+        audio.setAttribute("loop", "");
+        // 解决跨域访问audio的问题
+        audio.setAttribute("crossorigin", "anonymous");
+        let source = document.createElement("source");
+        source.setAttribute("src", song.src);
+        source.setAttribute("type", "audio/mp3");
+        audio.appendChild(source);
+
+        audio.onpause = (e) => {
+          // tricky: length不等于1时是用户主动点击的暂停，非因为js操作dom元素原因导致的暂停
+          if (e.path.length == 1) {
+            audio.play();
+          } else {
+            redrawAllAvatars();
+          }
+        };
+        audio.onplay = (e) => {
+          redrawAllAvatars();
+        };
+        return audio;
+      }
+
+      function showAudio(audio, backgroundColor) {
+        const div = document.getElementById("audioDiv");
+        div.style.backgroundColor = backgroundColor;
+        while (div.firstChild) {
+          div.removeChild(div.firstChild);
+        }
+        div.appendChild(audio);
+        const span = document.createElement("span");
+        span.innerText = audio.getAttribute("title");
+        div.appendChild(span);
+      }
+
+      function adjustSpatializationAudios() {
+        const me = avatars[0];
+        for (let i = 1; i < avatars.length; i++) {
+          const user = avatars[i];
+          const dx = user.x - me.x;
+          const dy = user.y - me.y;
+          const dst = Math.sqrt(dx * dx + dy * dy);
+          const maxV = maxPanValue(dst);
+          let v, d;
+          if (dx == 0) {
+            v = 0;
+          } else if (dy > 0) {
+            d = (Math.atan(dy / dx) * 180) / Math.PI;
+            v = ((90 - Math.abs(d)) / 90) * maxV;
+            if (d < 0) v = -v;
+          } else {
+            d = (Math.atan(dy / dx) * 180) / Math.PI;
+            v = ((90 - Math.abs(d)) / 90) * maxV;
+            if (d > 0) v = -v;
+          }
+          // 调整左右声道
+          if (!user.audioSource) {
+            user.audioCtx = new AudioContext();
+            user.audioSource = new MediaElementAudioSourceNode(user.audioCtx, {
+              mediaElement: user.audio,
+            });
+            user.panNode = new StereoPannerNode(user.audioCtx);
+          }
+          //   console.log(
+          //     `${user.audio.getAttribute("title")} set panNode.value to ${v}`
+          //   );
+          user.panNode.pan.value = v;
+          user.audioSource.connect(user.panNode);
+          user.panNode.connect(user.audioCtx.destination);
+
+          // adjust volume
+          user.audio.volume = smoothVolumeDecrement(dst);
+        }
+      }
+
+      function maxPanValue(d) {
+        const l = 1.0;
+        const k = 0.03;
+        const x0 = 100;
+        const x = d;
+        const v = l / (1 + Math.exp(-k * (x - x0)));
+        // console.log("distance:", d, "maxPanValue:", v);
+        return v;
+      }
+
+      function smoothVolumeDecrement(d) {
+        const l = 1.0;
+        const k = 0.03;
+        const x0 = 250;
+        const x = d;
+        const v = l / (1 + Math.exp(-k * (x0 - x)));
+        // console.log("distance:", d, "volume:", v);
+        return v;
+      }
+
+      function initRoom() {
+        canvas = document.getElementById("room");
+        resize(canvas);
+        ctx = canvas.getContext("2d");
+
+        canvas.addEventListener("click", click);
+        document.addEventListener("keydown", (e) => {
+          // 空格键控制开始或暂停移动
+          if (e.keyCode == 32) {
+            if (!keepMoving) {
+              keepMoving = true;
+              moving();
+            } else {
+              keepMoving = false;
+            }
+          }
+        });
+      }
+
+      songs = [
+        {
+          name: "01热烈欢迎",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628563724_ks4a5fpp0pw1.mp3",
+        },
+        {
+          name: "02用音乐欢迎",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628563725_ks4a5fv2082x.mp3",
+        },
+        {
+          name: "03西格弗里德王子的生日",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628563726_ks4a5g7d0eae.mp3",
+        },
+        {
+          name: "04王后登场",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628563727_ks4a5g7e0udf.mp3",
+        },
+        {
+          name: "05宾客们的舞蹈",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628563730_ks4a5gnp0xva.mp3",
+        },
+        {
+          name: "06天鹅飞翔",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628563730_ks4a5n2r00qf.mp3",
+        },
+        {
+          name: "07林中湖畔的天鹅",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628563731_ks4a5na30p27.mp3",
+        },
+        {
+          name: "08小天鹅的舞蹈",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628563734_ks4a5nvt0fwq.mp3",
+        },
+        {
+          name: "09西格弗里德与奥黛特",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628563733_ks4a5oat0xer.mp3",
+        },
+        {
+          name: "10西格弗里德邀请奥黛特前往城堡",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628563733_ks4a5oc10zq8.mp3",
+        },
+        {
+          name: "11红胡子巫师驱赶天鹅",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628563735_ks4a5qg90pow.mp3",
+        },
+        {
+          name: "12盛大的舞会",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628563737_ks4a5qhh045g.mp3",
+        },
+        {
+          name: "13六位贵族少女",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628563736_ks4a5r7301jr.mp3",
+        },
+        {
+          name: "14红胡子和女儿奥黛勒",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628563738_ks4a5rdk0b9u.mp3",
+        },
+        {
+          name: "15西格弗里德与奥黛勒共舞",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628563739_ks4a5tee006y.mp3",
+        },
+        {
+          name: "16红胡子与奥黛勒离开城堡",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628563741_ks4a5uf605my.mp3",
+        },
+        {
+          name: "17西格弗里德请求奥黛特原谅",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628563742_ks4a5vso0mgq.mp3",
+        },
+        {
+          name: "18湖上的决战，终幕",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628563743_ks4a5w9i0mmi.mp3",
+        },
+        {
+          name: "19幸福的结合",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628563743_ks4a5weg0dbb.mp3",
+        },
+        {
+          name: "01问候语",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628562346_ks4a45ku0xph.mp3",
+        },
+        {
+          name: "02高音竖笛：《一个小人儿站在森林里》",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628562347_ks4a45l50g92.mp3",
+        },
+        {
+          name: "03超高音竖笛：《所有的小鸟都到了》",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628562348_ks4a45li0eoj.mp3",
+        },
+        {
+          name: "04中音竖笛：《有一个小精灵在跳舞》",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628562351_ks4a45lz04rc.mp3",
+        },
+        {
+          name: "05高音竖笛和中音竖笛的二重奏：约翰·塞巴斯蒂安·巴赫的《小步舞曲》",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628562353_ks4a45mb09dl.mp3",
+        },
+        {
+          name: "06吉他",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628562355_ks4a490w0369.mp3",
+        },
+        {
+          name: "6.1吉他：《提洛尔人真有趣》",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628562395_ks4a495c0odq.mp3",
+        },
+        {
+          name: "6.2吉他：尼科罗·帕格尼尼的《阿丽埃塔》",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628562397_ks4a49is0t6b.mp3",
+        },
+        {
+          name: "07电吉他",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628562356_ks4a4apr0gdr.mp3",
+        },
+        {
+          name: "8.1钢琴：约翰·塞巴斯蒂安·巴赫的《小步舞曲》",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628562399_ks4a4atp08ob.mp3",
+        },
+        {
+          name: "8.2钢琴：布基伍基风格乐曲",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628562400_ks4a4aw40pmz.mp3",
+        },
+        {
+          name: "09羽管键琴：弗朗索瓦·库佩林的《小步舞曲》",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628562358_ks4a4ayt0ly1.mp3",
+        },
+        {
+          name: "10.1管风琴：像长笛",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628562358_ks4a4b1q0ao0.mp3",
+        },
+        {
+          name: "10.2管风琴：像小号",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628562360_ks4a4d9m0vgc.mp3",
+        },
+        {
+          name: "10.3管风琴：《一只鸟儿飞过》",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628562362_ks4a4dau0vfz.mp3",
+        },
+        {
+          name: "11.1小提琴模仿小猫的叫声",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628562363_ks4a4dwx0420.mp3",
+        },
+        {
+          name: "11.2小提琴：《一个小人儿站在森林里》",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628562364_ks4a4eeo0mpj.mp3",
+        },
+        {
+          name: "11.3用手指拨弦",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628562365_ks4a4eud0jkt.mp3",
+        },
+        {
+          name: "12中提琴",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628562365_ks4a4f0g0it3.mp3",
+        },
+        {
+          name: "13大提琴",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628562366_ks4a4fhl0xdf.mp3",
+        },
+        {
+          name: "14低音提琴",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628562368_ks4a4fnu0bej.mp3",
+        },
+        {
+          name: "15.1长笛：《一只鸟儿想结婚》",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628562369_ks4a4g290kih.mp3",
+        },
+        {
+          name: "15.2短笛",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628562369_ks4a4h440240.mp3",
+        },
+        {
+          name: "16双簧管：《狐狸，你偷了鹅》",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628562370_ks4a4h4w07fa.mp3",
+        },
+        {
+          name: "17单簧管：《布谷，布谷，来自森林的呼唤》",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628562373_ks4a4ha30vj6.mp3",
+        },
+        {
+          name: "18巴松管：《有一个小精灵在跳舞》",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628562374_ks4a4hfv0pk7.mp3",
+        },
+        {
+          name: "19小号：《啦啦啦，狩猎歌》",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628562375_ks4a4j0e0she.mp3",
+        },
+        {
+          name: "20长号：《噢，亲爱的奥古斯丁》",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628562376_ks4a4j6902e5.mp3",
+        },
+        {
+          name: "21圆号：《快乐的狩猎》",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628562377_ks4a4j9i07tf.mp3",
+        },
+        {
+          name: "22大号",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628562378_ks4a4jdp07pw.mp3",
+        },
+        {
+          name: "23.1没有响弦的小军鼓",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628562379_ks4a4kof0dmv.mp3",
+        },
+        {
+          name: "23.2有响弦的小军鼓",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628562381_ks4a4krs03h3.mp3",
+        },
+        {
+          name: "24大军鼓",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628562382_ks4a4leb0wh5.mp3",
+        },
+        {
+          name: "25.1定音鼓的不同音高",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628562385_ks4a4m7o0nhc.mp3",
+        },
+        {
+          name: "25.2连续击奏定音鼓",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628562387_ks4a4m7v0nu1.mp3",
+        },
+        {
+          name: "26钹",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628562390_ks4a4mkm09j2.mp3",
+        },
+        {
+          name: "27三角铁",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628562391_ks4a4mqo0bw5.mp3",
+        },
+        {
+          name: "28.1木琴不同的音高",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628562392_ks4a4nnh0pot.mp3",
+        },
+        {
+          name: "28.2木琴演奏",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628562393_ks4a4nq20j3l.mp3",
+        },
+        {
+          name: "29小约翰·施特劳斯的《电闪雷鸣波尔卡》",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628562395_ks4a4nrc0d3m.mp3",
+        },
+        {
+          name: "01热烈欢迎",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628561395_ks4a1lho0d7t.mp3",
+        },
+        {
+          name: "02春",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628561396_ks4a1lrx0ohh.mp3",
+        },
+        {
+          name: "03悦耳的鸟鸣",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628561397_ks4a1lth0dep.mp3",
+        },
+        {
+          name: "04奔腾的小溪",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628561398_ks4a1lti0xrb.mp3",
+        },
+        {
+          name: "05雷雨",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628561399_ks4a1ltj0oz7.mp3",
+        },
+        {
+          name: "06仙女与牧羊人的舞蹈",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628561400_ks4a1ndk0g8h.mp3",
+        },
+        {
+          name: "07夏",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628561402_ks4a1o2z0sim.mp3",
+        },
+        {
+          name: "08沉睡的牧羊人",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628561403_ks4a1oj00c2e.mp3",
+        },
+        {
+          name: "09暴风雨",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628561405_ks4a1p9z0obp.mp3",
+        },
+        {
+          name: "10收获感恩节的舞蹈",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628561405_ks4a1pee0t57.mp3",
+        },
+        {
+          name: "11严寒",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628561407_ks4a1pmf0nvz.mp3",
+        },
+        {
+          name: "12跺脚声",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628561408_ks4a1q2c0hnf.mp3",
+        },
+        {
+          name: "13牙齿打颤",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628561410_ks4a1rkk0lus.mp3",
+        },
+        {
+          name: "14温暖小屋的舒适生活",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628561411_ks4a1t7o008o.mp3",
+        },
+        {
+          name: "15再见春天",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628561412_ks4a1tqu06ku.mp3",
+        },
+        {
+          name: "01-01音乐家进行曲",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560986_ks49sttn0raj.mp3",
+        },
+        {
+          name: "01-02横笛&短笛",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560988_ks49sttn0ma9.mp3",
+        },
+        {
+          name: "01-03双簧管",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560989_ks49stto0z7r.mp3",
+        },
+        {
+          name: "01-04单簧管",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560990_ks49sttp03jm.mp3",
+        },
+        {
+          name: "01-05巴松管",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560991_ks49sttp0yge.mp3",
+        },
+        {
+          name: "01-06大提琴",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560992_ks49sutf0xpd.mp3",
+        },
+        {
+          name: "01-07大号",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560993_ks49sv1204yn.mp3",
+        },
+        {
+          name: "01-08鼓",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560994_ks49svc409xw.mp3",
+        },
+        {
+          name: "01-09小号",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560996_ks49svga0nok.mp3",
+        },
+        {
+          name: "01-10巴塞特单簧管",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560997_ks49swj60ryx.mp3",
+        },
+        {
+          name: "01-11搓板",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560998_ks49swmt02ke.mp3",
+        },
+        {
+          name: "01-12手风琴",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560999_ks49swpg0s7e.mp3",
+        },
+        {
+          name: "02序曲",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628561001_ks49sxbf0jd4.mp3",
+        },
+        {
+          name: "03-01驮麻袋的毛驴",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628561002_ks49sy2p07dp.mp3",
+        },
+        {
+          name: "03-02毛驴前往不莱梅",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628561003_ks49sy8n0qa0.mp3",
+        },
+        {
+          name: "04-01狩猎的猎狗",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628561004_ks49sycu001e.mp3",
+        },
+        {
+          name: "04-02毛驴拉手风琴，猎狗敲鼓",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628561005_ks49szps09bm.mp3",
+        },
+        {
+          name: "04-03毛驴和猎狗一同前行",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628561008_ks49szy10xhy.mp3",
+        },
+        {
+          name: "05-01愁苦的老猫",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628561010_ks49t02q0j1f.mp3",
+        },
+        {
+          name: "05-02三只动物一起上路",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628561011_ks49t0o20yd6.mp3",
+        },
+        {
+          name: "06-01要进汤锅的公鸡",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628561012_ks49t1m00isk.mp3",
+        },
+        {
+          name: "06-02四只动物一起上路",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628561013_ks49t2250per.mp3",
+        },
+        {
+          name: "07森林之调",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628561016_ks49t23f0jwt.mp3",
+        },
+        {
+          name: "08公鸡看到了光亮",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628561017_ks49t3gw0834.mp3",
+        },
+        {
+          name: "09动物们向房子走去",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628561019_ks49t3hi08j9.mp3",
+        },
+        {
+          name: "10动物们冲进屋里",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628561020_ks49t3mc0pan.mp3",
+        },
+        {
+          name: "11宴席音乐",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628561023_ks49t3t401t3.mp3",
+        },
+        {
+          name: "12动物们舒服地躺下",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628561024_ks49t5m103ne.mp3",
+        },
+        {
+          name: "13午夜之后",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628561025_ks49t6890vn4.mp3",
+        },
+        {
+          name: "14满意的城市音乐家",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628561026_ks49t71p0ltl.mp3",
+        },
+        {
+          name: "01问好",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560597_ks49ra7m0n6a.mp3",
+        },
+        {
+          name: "02舞蹈演员登场",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560595_ks49rbdz0nf2.mp3",
+        },
+        {
+          name: "03仙女们",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560596_ks49rbe00bbh.mp3",
+        },
+        {
+          name: "04仙女们的礼物",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560598_ks49rbeo0xkw.mp3",
+        },
+        {
+          name: "05邪恶仙女卡拉波斯",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560598_ks49rbfr04w6.mp3",
+        },
+        {
+          name: "06魔法",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560599_ks49rfyy0lx9.mp3",
+        },
+        {
+          name: "07岁月飞逝1",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560601_ks49rgko0vz0.mp3",
+        },
+        {
+          name: "08岁月飞逝2",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560602_ks49rhj2045i.mp3",
+        },
+        {
+          name: "09生日",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560602_ks49rijw0itn.mp3",
+        },
+        {
+          name: "10玫瑰花束",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560605_ks49ripg0ixe.mp3",
+        },
+        {
+          name: "11纺锤",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560604_ks49rmfv0ywg.mp3",
+        },
+        {
+          name: "12百年沉睡",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560607_ks49ro8o0a2t.mp3",
+        },
+        {
+          name: "13王子即将登场",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560608_ks49ro9a071h.mp3",
+        },
+        {
+          name: "14王子",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560609_ks49rore0q8k.mp3",
+        },
+        {
+          name: "15吻",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560611_ks49rozx0zzb.mp3",
+        },
+        {
+          name: "16咒语被打破",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560612_ks49rp0k0p3y.mp3",
+        },
+        {
+          name: "17婚礼进行曲",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560613_ks49ruxj0i2l.mp3",
+        },
+        {
+          name: "18小红帽和狼",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560613_ks49rv8h0n2w.mp3",
+        },
+        {
+          name: "19新郎和新娘在跳舞",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560615_ks49rw0h0uqv.mp3",
+        },
+        {
+          name: "20落幕",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560616_ks49rxpy0ccc.mp3",
+        },
+        {
+          name: "21终曲",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560617_ks49rync0y9z.mp3",
+        },
+        {
+          name: "01欢迎乘坐雪橇",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560198_ks491znr0yo3.mp3",
+        },
+        {
+          name: "02在音乐厅",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560198_ks491zns0q8e.mp3",
+        },
+        {
+          name: "03序曲",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560199_ks491znt0zxl.mp3",
+        },
+        {
+          name: "04旅程开始",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560203_ks491znt0lid.mp3",
+        },
+        {
+          name: "05雪橇之旅",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560204_ks491znu0egm.mp3",
+        },
+        {
+          name: "06马儿在摇摆",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560204_ks4921to05go.mp3",
+        },
+        {
+          name: "07速度越来越快",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560206_ks49237d0bgg.mp3",
+        },
+        {
+          name: "08节日音乐",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560207_ks4923ns06xm.mp3",
+        },
+        {
+          name: "09雪橇继续前进",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560208_ks49248y0anv.mp3",
+        },
+        {
+          name: "10一位冻得瑟瑟发抖的女士",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560210_ks4924y90294.mp3",
+        },
+        {
+          name: "11宴会开始",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560211_ks4925ke0be3.mp3",
+        },
+        {
+          name: "12路易丝和大家一起跳舞",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560212_ks4925q20y21.mp3",
+        },
+        {
+          name: "13最后一支舞",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560213_ks49261y0dx4.mp3",
+        },
+        {
+          name: "14再次上路",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560214_ks4926w801vh.mp3",
+        },
+        {
+          name: "15音乐会即将结束",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560217_ks4926zm0u72.mp3",
+        },
+        {
+          name: "16《驾雪橇》（纯音乐）",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628560238_ks4928h20350.mp3",
+        },
+        {
+          name: "01序曲",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628559713_ks48vlln0h78.mp3",
+        },
+        {
+          name: "02莫扎特累了（选自第一乐章）",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628559715_ks48vllu0zy4.mp3",
+        },
+        {
+          name: "03静谧的房间（选自第一乐章）",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628559715_ks48vllv0x73.mp3",
+        },
+        {
+          name: "04月光（选自第二乐章）",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628559717_ks48vllw0kfm.mp3",
+        },
+        {
+          name: "05梦中的小莫扎特（选自第三乐章）",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628559718_ks48vllx008h.mp3",
+        },
+        {
+          name: "06小莫扎特在玩耍（选自第三乐章）",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628559719_ks48vnqz0q1m.mp3",
+        },
+        {
+          name: "07神童在途（选自第三乐章）",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628559719_ks48vnrc0j41.mp3",
+        },
+        {
+          name: "08陌生城市的化装舞会（选自第四乐章）",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628559722_ks48vnuy0nlx.mp3",
+        },
+        {
+          name: "09莫扎特从梦中醒来（选自第四乐章）",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628559723_ks48vowb0pgq.mp3",
+        },
+        {
+          name: "10多么美好的夜晚！（选自第四乐章）",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628559723_ks48voxt0gkg.mp3",
+        },
+        {
+          name: "11第一乐章",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628559729_ks48vp5g0xb4.mp3",
+        },
+        {
+          name: "12第二乐章",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628559729_ks48vpdz0d6a.mp3",
+        },
+        {
+          name: "13第三乐章",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628559728_ks48vq100ieh.mp3",
+        },
+        {
+          name: "14第四乐章",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628559731_ks48vqj403ph.mp3",
+        },
+        {
+          name: "01音乐之城热闹非凡",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628500087_ks489jec0iu2.mp3",
+        },
+        {
+          name: "02给小狐狸们的乐曲（选自《G大调苏格兰舞曲》）",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628559279_ks489jef05k9.mp3",
+        },
+        {
+          name: "03给小狐狸们的进行曲（选自《土耳其进行曲》）",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628559281_ks489jeh0av1.mp3",
+        },
+        {
+          name: "04月光下的猫头鹰夫人（选自《月光奏鸣曲》）",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628559282_ks489jeh0arg.mp3",
+        },
+        {
+          name: "05狐獴之舞（选自《乡村舞曲》）",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628559283_ks489jei0gop.mp3",
+        },
+        {
+          name: "06贝多芬先生和豪猪小姐（选自《致爱丽丝》）",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628559285_ks489l5n0f8s.mp3",
+        },
+        {
+          name: "07火烈鸟先生拉小提琴（选自《春天协奏曲》）",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628559286_ks489lfy01wf.mp3",
+        },
+        {
+          name: "08让我们大家做朋友吧（选自《欢乐颂》）",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628559286_ks489lhc0u90.mp3",
+        },
+        {
+          name: "09那是美好的一天（选自《悲怆》）",
+          src: "https://wechatapppro-1252524126.file.myqcloud.com/appEUso8xNr5665/audio_compressed/1628559288_ks489m590365.mp3",
+        },
+      ];
+    </script>
+    <style>
+      body {
+        font-family: Helvetica sans-serif;
+        padding: 0;
+        margin: 0;
+        overflow: hidden;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -o-user-select: none;
+        -ms-user-select: none;
+        user-select: none;
+      }
+      canvas {
+        display: block;
+        position: absolute;
+        top: 0;
+        left: 0;
+      }
+    </style>
+  </head>
+  <body onload="initRoom()">
+    <div id="canvasDiv">
+      <canvas id="room"></canvas>
+    </div>
+    <div
+      id="audioDiv"
+      style="
+        position: absolute;
+        bottom: 0;
+        padding: 10px;
+        height: 54px;
+        width: 100%;
+        background-color: beige;
+      "
+    ></div>
+  </body>
+</html>
