@@ -6,7 +6,7 @@ export default {
   data() {
     return {
       newRoom: null,
-      dragRoom: null,
+      movingRoom: null,
       floor: {
         offsetX: 0,
         offsetY: 0,
@@ -18,12 +18,60 @@ export default {
       rooms: [],
     }
   },
+  methods: {
+    moveFloor(dx, dy) {
+      let rect = this.$refs['canvas'].getBoundingClientRect()
+      this.floor.x += dx
+      this.floor.y += dy
+      this.floor.offsetX += dx
+      this.floor.offsetY += dy
+      let dw = 0
+      let dh = 0
+      let addSize = 1000
+      if (this.floor.x > 0) {
+        dw = this.floor.x + addSize
+        this.floor.width += dw
+        this.floor.x -= dw
+        this.floor.offsetX -= dw
+      }
+      if (this.floor.y > 0) {
+        dh = this.floor.y + addSize
+        this.floor.height += dh
+        this.floor.y -= dh
+        this.floor.offsetY -= dh
+      }
+      let r = this.floor.x + this.floor.width
+      let b = this.floor.y + this.floor.height
+      if (r < rect.width) {
+        dw = (rect.width - r) + addSize
+        this.floor.width += dw
+      }
+      if (b < rect.height) {
+        dh = (rect.height - b) + addSize
+        this.floor.height += dh
+      }
+      this.rooms.forEach((r) => {
+        if (!this.movingRoom || r.id != this.movingRoom.id) {
+          r.objects.forEach((object) => {
+            object.x += dx
+            object.y += dy
+          })
+        }
+      })
+
+    }
+  },
   mounted() {
     let r = this.$refs['canvas'].getBoundingClientRect()
     this.floor.width = r.width
     this.floor.height = r.height
     this.floor.offsetX = r.x
     this.floor.offsetY = r.y
+    this.emitter.emit('canvaschange', { x: r.x, y: r.y, width: r.width, height: r.height })
+    window.addEventListener('resize', e => {
+      let r = this.$refs['canvas'].getBoundingClientRect()
+      this.emitter.emit('canvaschange', { x: r.x, y: r.y, width: r.width, height: r.height })
+    })
 
     // from left panel to the canvas
     this.emitter.on('dragstart', (newRoom) => {
@@ -41,6 +89,10 @@ export default {
       })
       this.rooms.push(this.newRoom)
     })
+    this.emitter.on('movefloor', ({ dx, dy }) => {
+      console.log('movefloor:', dx, dy)
+      this.moveFloor(dx, dy)
+    })
 
 
 
@@ -54,41 +106,7 @@ export default {
         end(event) {
         },
         move(event) {
-          let rect = self.$refs['canvas'].getBoundingClientRect()
-          self.floor.x += event.dx
-          self.floor.y += event.dy
-          self.floor.offsetX += event.dx
-          self.floor.offsetY += event.dy
-          let dw = 0
-          let dh = 0
-          if (self.floor.x > 0) {
-            dw = self.floor.x + 100
-            self.floor.width += dw
-            self.floor.x -= dw
-            self.floor.offsetX -= dw
-          }
-          if (self.floor.y > 0) {
-            dh = self.floor.y + 100
-            self.floor.height += dh
-            self.floor.y -= dh
-            self.floor.offsetY -= dh
-          }
-          let r = self.floor.x + self.floor.width
-          let b = self.floor.y + self.floor.height
-          if (r < rect.width) {
-            dw = (rect.width - r) + 100
-            self.floor.width += dw
-          }
-          if (b < rect.height) {
-            dh = (rect.height - b) + 100
-            self.floor.height += dh
-          }
-          self.rooms.forEach((g) => {
-            g.objects.forEach((object) => {
-              object.x += event.dx
-              object.y += event.dy
-            })
-          })
+          self.moveFloor(event.dx, event.dy)
         }
       }
     })
@@ -99,15 +117,30 @@ export default {
       listeners: {
         start(event) {
           let id = event.target.getAttribute('id').split('-')[1]
-          self.dragRoom = self.rooms.find(r => r.id === id)
+          self.movingRoom = self.rooms.find(r => r.id === id)
         },
         end(event) {
+          self.movingRoom = null
         },
         move(event) {
-          self.dragRoom.objects.forEach(obj => {
+          let rect = self.$refs['canvas'].getBoundingClientRect()
+          self.movingRoom.objects.forEach(obj => {
             obj.x += event.dx
             obj.y += event.dy
           })
+          if (event.clientX > rect.x + rect.width - 1) {
+            // 10为移动的速度
+            self.moveFloor(-5, 0)
+          }
+          if (event.clientX < rect.x) {
+            self.moveFloor(5, 0)
+          }
+          if (event.clientY > rect.y + rect.height - 1) {
+            self.moveFloor(0, -5)
+          }
+          if (event.clientY < rect.y) {
+            self.moveFloor(0, 5)
+          }
         }
       }
     })

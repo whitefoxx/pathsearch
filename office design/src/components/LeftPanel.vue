@@ -7,6 +7,7 @@ export default {
     return {
       dragObj: null,
       position: { x: 0, y: 0 },
+      canvas: null,
       rooms: [
         {
           id: randomId(),
@@ -16,7 +17,7 @@ export default {
               y: 0,
               width: 250,
               height: 200,
-              style: 'fill: Beige;'
+              style: 'fill: Orange;'
             }
           ]
         }, {
@@ -27,7 +28,7 @@ export default {
               y: 0,
               width: 250,
               height: 200,
-              style: 'fill: Beige;'
+              style: 'fill: Orange;'
             },
             {
               x: 40,
@@ -81,6 +82,13 @@ export default {
     }
   },
   mounted() {
+    // listening events
+    this.emitter.on('canvaschange', (canvas) => {
+      this.canvas = canvas
+    })
+
+
+
     const roomsObj = interact('.select-room')
     console.log(roomsObj)
     const self = this
@@ -111,6 +119,20 @@ export default {
           self.position.y += event.dy
           self.emitter.emit('dragmove', self.position)
           self.dragObj.style.transform = `translate(${self.position.x}px, ${self.position.y}px)`
+
+          if (self.canvas) {
+            if (event.clientX > self.canvas.x + self.canvas.width - 1) {
+              console.log(event.clientX, event.clientY)
+              self.emitter.emit('movefloor', { dx: -5, dy: 0 })
+            }
+            if (event.clientY > self.canvas.y + self.canvas.height - 1) {
+              self.emitter.emit('movefloor', { dx: 0, dy: -5 })
+            }
+            if (event.clientY < self.canvas.y) {
+              self.emitter.emit('movefloor', { dx: 0, dy: 5 })
+            }
+
+          }
         }
       }
     })
