@@ -1,39 +1,73 @@
 <script>
 import interact from 'interactjs';
+import { randomId } from '../helpers/utils';
 
 export default {
   data() {
     return {
       dragObj: null,
       position: { x: 0, y: 0 },
-      groups: [
+      rooms: [
         {
-          id: 0,
-          shapes: [
+          id: randomId(),
+          objects: [
             {
               x: 0,
               y: 0,
               width: 250,
               height: 200,
-              style: 'fill: rgb(0, 200, 0);'
+              style: 'fill: Beige;'
             }
           ]
         }, {
-          id: 1,
-          shapes: [
+          id: randomId(),
+          objects: [
             {
               x: 0,
               y: 0,
               width: 250,
               height: 200,
-              style: 'fill: rgb(0, 200, 0);'
+              style: 'fill: Beige;'
             },
             {
-              x: 80,
+              x: 40,
               y: 40,
+              width: 80,
+              height: 40,
+              style: 'fill: Violet;'
+            },
+            {
+              x: 100,
+              y: 100,
+              width: 80,
+              height: 40,
+              style: 'fill: Violet;'
+            }
+          ]
+        }
+      ],
+      decorations: [
+        {
+          id: randomId(),
+          objects: [
+            {
+              x: 0,
+              y: 0,
               width: 100,
-              height: 80,
-              style: 'fill: rgb(0, 0, 100);'
+              height: 100,
+              style: 'fill: Violet;'
+            }
+          ]
+        },
+        {
+          id: randomId(),
+          objects: [
+            {
+              x: 0,
+              y: 0,
+              width: 80,
+              height: 40,
+              style: 'fill: DarkGreen;'
             }
           ]
         }
@@ -47,14 +81,16 @@ export default {
     }
   },
   mounted() {
-    const interactObj = interact('.material')
+    const roomsObj = interact('.select-room')
+    console.log(roomsObj)
     const self = this
-    interactObj.draggable({
+    roomsObj.draggable({
       listeners: {
         start(event) {
           console.log(event.type, event.target, event)
-          let index = parseInt(event.target.getAttribute('id').split('-')[1])
-          self.emitter.emit('dragstart', self.groups[index])
+          let id = event.target.getAttribute('id').split('-')[1]
+          let room = self.rooms.find(r => r.id === id)
+          self.emitter.emit('dragstart', room)
           let dragObj = event.target.cloneNode(true)
           dragObj.style.position = 'absolute'
           dragObj.style.top = event.clientY
@@ -83,12 +119,24 @@ export default {
 </script>
 <template>
   <div class="left" ref="leftPanel">
+    <p>房间</p>
     <ul>
-      <li :key="group.i" v-for="group in groups">
-        <svg class="material" :id="'svg-' + group.id" height="200" width="250">
+      <li :key="room.i" v-for="room in rooms">
+        <svg class="select-room" :id="'svg-' + room.id" height="200" width="250">
           <g>
-            <rect :key="shape.i" v-for="shape in group.shapes" :x="shape.x" :y="shape.y" :width="shape.width"
-              :height="shape.height" :style="shape.style"></rect>
+            <rect :key="object.i" v-for="object in room.objects" :x="object.x" :y="object.y" :width="object.width"
+              :height="object.height" :style="object.style"></rect>
+          </g>
+        </svg>
+      </li>
+    </ul>
+    <p>装饰物</p>
+    <ul>
+      <li :key="dec.i" v-for="dec in decorations">
+        <svg class="select-decoration" :id="'svg-' + dec.id" height="100" width="100">
+          <g>
+            <rect :key="object.i" v-for="object in dec.objects" :x="object.x" :y="object.y" :width="object.width"
+              :height="object.height" :style="object.style"></rect>
           </g>
         </svg>
       </li>
@@ -111,7 +159,5 @@ export default {
 
 .left ul>li {
   margin-bottom: 20px;
-  width: 250px;
-  height: 200px;
 }
 </style>
