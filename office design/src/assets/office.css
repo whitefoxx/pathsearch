@@ -1,0 +1,13 @@
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background-color: #fefefe;
+  margin: 0;
+}
+
+#app {
+  height: 100%;
+}
