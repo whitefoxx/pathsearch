@@ -7,9 +7,8 @@ export default {
     return {
       newRoom: null,
       movingRoom: null,
+      canvas: null,
       floor: {
-        offsetX: 0,
-        offsetY: 0,
         x: 0,
         y: 0,
         width: "100%",
@@ -19,26 +18,32 @@ export default {
     }
   },
   methods: {
+    resizeCanvas() {
+      let r = this.$refs['canvas'].getBoundingClientRect()
+      this.canvas = { x: r.x, y: r.y, width: r.width, height: r.height }
+      this.emitter.emit('canvaschange', { x: r.x, y: r.y, width: r.width, height: r.height })
+    },
+    initFloor() {
+      let r = this.$refs['canvas'].getBoundingClientRect()
+      this.floor.width = r.width
+      this.floor.height = r.height
+    },
     moveFloor(dx, dy) {
       let rect = this.$refs['canvas'].getBoundingClientRect()
       this.floor.x += dx
       this.floor.y += dy
-      this.floor.offsetX += dx
-      this.floor.offsetY += dy
       let dw = 0
       let dh = 0
-      let addSize = 1000
+      let addSize = 1000 // 必须是地板格子的整数倍
       if (this.floor.x > 0) {
         dw = this.floor.x + addSize
         this.floor.width += dw
-        this.floor.x -= dw
-        this.floor.offsetX -= dw
+        this.floor.x = -addSize
       }
       if (this.floor.y > 0) {
         dh = this.floor.y + addSize
         this.floor.height += dh
-        this.floor.y -= dh
-        this.floor.offsetY -= dh
+        this.floor.y = -addSize
       }
       let r = this.floor.x + this.floor.width
       let b = this.floor.y + this.floor.height
@@ -62,16 +67,9 @@ export default {
     }
   },
   mounted() {
-    let r = this.$refs['canvas'].getBoundingClientRect()
-    this.floor.width = r.width
-    this.floor.height = r.height
-    this.floor.offsetX = r.x
-    this.floor.offsetY = r.y
-    this.emitter.emit('canvaschange', { x: r.x, y: r.y, width: r.width, height: r.height })
-    window.addEventListener('resize', e => {
-      let r = this.$refs['canvas'].getBoundingClientRect()
-      this.emitter.emit('canvaschange', { x: r.x, y: r.y, width: r.width, height: r.height })
-    })
+    this.resizeCanvas()
+    this.initFloor()
+    window.addEventListener('resize', this.resizeCanvas)
 
     // from left panel to the canvas
     this.emitter.on('dragstart', (newRoom) => {
@@ -84,8 +82,8 @@ export default {
     })
     this.emitter.on('dragend', (position) => {
       this.newRoom.objects.forEach((object) => {
-        object.x += (position.x - this.floor.offsetX + this.floor.x)
-        object.y += (position.y - this.floor.offsetY + this.floor.y)
+        object.x += (position.x - this.canvas.x)
+        object.y += (position.y - this.canvas.y)
       })
       this.rooms.push(this.newRoom)
     })
@@ -93,8 +91,6 @@ export default {
       console.log('movefloor:', dx, dy)
       this.moveFloor(dx, dy)
     })
-
-
 
     // interaction of canvas
     const canvasInteract = interact('#canvas')
@@ -129,7 +125,6 @@ export default {
             obj.y += event.dy
           })
           if (event.clientX > rect.x + rect.width - 1) {
-            // 10为移动的速度
             self.moveFloor(-5, 0)
           }
           if (event.clientX < rect.x) {

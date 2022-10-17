@@ -87,8 +87,6 @@ export default {
       this.canvas = canvas
     })
 
-
-
     const roomsObj = interact('.select-room')
     console.log(roomsObj)
     const self = this
