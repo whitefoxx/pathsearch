@@ -10,18 +10,32 @@
       }
     </style>
     <script>
+      let columns = 45;
+      let rows = 20;
+      let nodeSize = 30; // node size
+      let lineWidth = 1;
+      let startX = 10;
+      let startY = 10;
+
+      let space;
+      let obstacleSet;
+
+      let startNode;
+      let destNode;
+      let paths = null;
+
       class Node {
         constructor(x, y) {
           this.x = x;
           this.y = y;
-          this.parent = undefined;
+          this.parent = null;
           this.pathD = Infinity; // 起点到这个点的实际距离
           this.heuristicD = Infinity; // 这个点到终点的启发函数计算出来的估计距离
           this.key = `${this.x},${this.y}`;
         }
 
         reset() {
-          this.parent = undefined;
+          this.parent = null;
           this.pathD = Infinity;
           this.heuristicD = Infinity;
         }
@@ -58,9 +72,7 @@
         }
 
         print() {
-          this.map.forEach((n, k) => {
-            // console.log("node:", n.x, n.y);
-          });
+          this.map.forEach((n, k) => {});
         }
 
         add(node) {
@@ -93,36 +105,21 @@
         }
       }
 
-      let columns = 45;
-      let rows = 20;
-      let nodeSize = 30; // node size
-      let lineWidth = 1;
-      let startX = 10;
-      let startY = 10;
-
-      let spaceExtWidth = 0;
-      let spaceExtHeight = 0;
-      let spaceOffsetX = 0;
-      let spaceOffsetY = 0;
-
-      const openSet = new NodeSet();
-      const closeSet = new NodeSet();
-      const obstacleSet = new NodeSet();
-
-      let startNode;
-      let destNode;
-      let found = false;
       function searchPath() {
         draw();
 
         const astarBtn = document.getElementById("Astar");
         astarBtn.onclick = (e) => {
-          if (found) {
+          if (paths) {
             alert("请刷新页面重新开始，或清除路径");
             return;
           }
-          found = astar();
-          if (found) {
+
+          const { obstacleSet } = parseSpace(space);
+          paths = do_astar_search(obstacleSet, startNode, destNode);
+          console.log("paths:", paths);
+
+          if (paths) {
             let node = destNode.parent;
             while (node.parent) {
               drawNode(node);
@@ -130,8 +127,6 @@
             }
           } else {
             alert("找不到路径，请清除障碍或重新设置起点终点再试！");
-            openSet.clear();
-            closeSet.clear();
             startNode.reset();
             destNode.reset();
           }
@@ -139,67 +134,140 @@
 
         const clearBtn = document.getElementById("clearPath");
         clearBtn.onclick = (e) => {
-          if (found) {
+          if (paths) {
             let node = destNode.parent;
             while (node.parent) {
               clearNode(node);
               node = node.parent;
             }
-            found = false;
-            openSet.clear();
-            closeSet.clear();
+            paths.length = 0;
+            paths = null;
             startNode.reset();
             destNode.reset();
           }
         };
       }
 
-      function astar() {
-        startNode.parent = undefined;
-        startNode.pathD = 0;
-        startNode.heuristicD = heuristic(startNode, destNode);
-        openSet.add(startNode);
+      function parseSpace(space) {
+        const rooms = space.rooms;
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+
+        rooms.forEach((room) => {
+          minX = Math.min(minX, room.x);
+          minY = Math.min(minY, room.y);
+          maxX = Math.max(maxX, room.x + room.w);
+          maxY = Math.max(maxY, room.y + room.h);
+        });
+
+        maxX += space.unit;
+        minX -= space.unit;
+        maxY += space.unit;
+        minY -= space.unit;
+
+        const columns = (maxX - minX) / space.unit;
+        const rows = (maxY - minY) / space.unit;
+
+        const obstacleSet = new NodeSet();
+        const originX = minX;
+        const originY = minY;
+        rooms.forEach((room) => {
+          room.items.forEach((item) => {
+            if (
+              item.kind === "horizontal wall" ||
+              item.kind == "vertical wall"
+            ) {
+              const rs = item.h / space.unit;
+              const cs = item.w / space.unit;
+              const offsetC = Math.floor((item.x - originX) / space.unit);
+              const offsetR = Math.floor((item.y - originY) / space.unit);
+              for (let r = 0; r < rs; r++) {
+                for (let c = 0; c < cs; c++) {
+                  const node = new Node(offsetC + c, offsetR + r);
+                  obstacleSet.add(node);
+                }
+              }
+            }
+          });
+        });
+
+        return {
+          originX,
+          originY,
+          rows,
+          columns,
+          obstacleSet,
+        };
+      }
+
+      function astar_search(space, fromPosition, toPosition) {
+        const { originX, originY, obstacleSet } = parseSpace(space);
+        const fromX = Math.floor((fromPosition.x - originX) / space.unit);
+        const fromY = Math.floor((fromPosition.y - originY) / space.unit);
+        const toX = Math.floor((toPosition.x - originX) / space.unit);
+        const toY = Math.floor((toPosition.y - originY) / space.unit);
+        const fromNode = new Node(fromX, fromY);
+        const toNode = new Node(toX, toY);
+
+        return do_astar_search(obstacleSet, fromNode, toNode);
+      }
+
+      function do_astar_search(obstacleSet, fromNode, toNode) {
+        const openSet = new NodeSet();
+        const closeSet = new NodeSet();
+
+        fromNode.parent = null;
+        fromNode.pathD = 0;
+        fromNode.heuristicD = heuristic(fromNode, toNode);
+        openSet.add(fromNode);
 
         while (true) {
-          // // console.log("openset:");
-          // openSet.print();
-          // // console.log("closeset:");
-          // closeSet.print();
           let node = openSet.pop();
-          if (!node) return false;
+          if (!node) return null;
           closeSet.add(node);
-          if (node.equal(destNode)) {
-            destNode = node;
-            return true;
+          if (node.equal(toNode)) {
+            toNode.parent = node.parent;
+            let dx, dy, pRatio, cRatio, pNode;
+            const paths = new Array();
+            pNode = null;
+            while (node.parent) {
+              dy = node.y - node.parent.y;
+              dx = node.x - node.parent.x;
+              cRatio = dx === 0 ? Infinity : dy / dx;
+              if (pNode === null) {
+                pRatio = cRatio;
+                pNode = node;
+              } else if (cRatio !== pRatio) {
+                paths.push([pNode.x - node.x, pNode.y - node.y]);
+                pNode = node;
+                pRatio = cRatio;
+              }
+              node = node.parent;
+            }
+            if (pNode && node && !pNode.equal(node)) {
+              paths.push([pNode.x - node.x, pNode.y - node.y]);
+            }
+            paths.reverse();
+            return paths;
           }
           node.neighborCoords().forEach((coord) => {
             const k = `${coord[0]},${coord[1]}`;
-            // console.log("k:", k, columns, rows);
             let nb;
-            if (
-              coord[0] < 0 ||
-              coord[0] >= columns ||
-              coord[1] < 0 ||
-              coord[1] >= rows
-            ) {
-              // console.log("1");
-            } else if (!isOkToMove(node.x, node.y, coord[0], coord[1])) {
-              // console.log("2");
+            if (!isOkToMove(obstacleSet, node.x, node.y, coord[0], coord[1])) {
             } else if ((nb = closeSet.get(k))) {
-              // console.log("3");
             } else if ((nb = openSet.get(k))) {
-              // console.log("4");
               const d = neighborDistance(node, nb);
               if (node.pathD + d < nb.pathD) {
                 nb.parent = node;
                 nb.pathD = node.pathD + d;
               }
             } else {
-              // console.log("5");
               nb = new Node(coord[0], coord[1]);
               const d = neighborDistance(node, nb);
               nb.pathD = node.pathD + d;
-              nb.heuristicD = heuristic(nb, destNode);
+              nb.heuristicD = heuristic(nb, toNode);
               nb.parent = node;
               openSet.add(nb);
             }
@@ -207,7 +275,7 @@
         }
       }
 
-      function isOkToMove(x1, y1, x2, y2) {
+      function isOkToMove(obstacleSet, x1, y1, x2, y2) {
         const k = `${x2},${y2}`;
         if (obstacleSet.get(k)) return false;
         const d = Math.abs(x1 - x2) + Math.abs(y1 - y2);
@@ -233,6 +301,7 @@
         return d;
       }
 
+      // draw相关代码
       function drawNode(node) {
         const canvas = document.getElementById("map");
         const ctx = canvas.getContext("2d");
@@ -270,48 +339,16 @@
         ctx.lineWidth = lineWidth;
 
         function drawSpace(space) {
-          const rooms = space.rooms;
-          let minX = Infinity;
-          let minY = Infinity;
-          let maxX = -Infinity;
-          let maxY = -Infinity;
-
-          rooms.forEach((room) => {
-            minX = Math.min(minX, room.x);
-            minY = Math.min(minY, room.y);
-            maxX = Math.max(maxX, room.x + room.w);
-            maxY = Math.max(maxY, room.y + room.h);
-          });
-
-          maxX += spaceExtWidth / 2;
-          minX -= spaceExtWidth / 2;
-          maxY += spaceExtHeight / 2;
-          minY -= spaceExtHeight / 2;
-          spaceOffsetX = startX - minX;
-          spaceOffsetY = startY - minY;
-          columns = (maxX - minX) / space.unit;
-          rows = (maxY - minY) / space.unit;
+          const r = parseSpace(space);
+          obstacleSet = r.obstacleSet;
+          columns = r.columns;
+          rows = r.rows;
           nodeSize = space.unit;
-
           drawGrid(ctx, startX, startY, columns, rows, nodeSize);
-
-          rooms.forEach((room) => {
-            room.items.forEach((item) => {
-              if (
-                item.kind === "horizontal wall" ||
-                item.kind == "vertical wall"
-              ) {
-                const rows = item.h / space.unit;
-                const columns = item.w / space.unit;
-                const offsetR = (item.x - minX) / space.unit;
-                const offsetC = (item.y - minY) / space.unit;
-                for (let r = 0; r < rows; r++) {
-                  for (let c = 0; c < columns; c++) {
-                    setObstacleNode(offsetC + c, offsetR + r);
-                  }
-                }
-              }
-            });
+          obstacleSet.map.forEach((n, k) => {
+            const x = n.x * space.unit + startX;
+            const y = n.y * space.unit + startY;
+            fillRectAtPoint(x, y, "rgba(0, 0, 200, 0.5)");
           });
         }
 
@@ -373,7 +410,7 @@
         }
 
         function click(e) {
-          if (found) {
+          if (paths) {
             alert("请刷新页面重新开始，或清除路径");
             return;
           }
@@ -403,10 +440,10 @@
           if (!obstacleSet.has(node)) {
             if (startNode && startNode.isAt(column, row)) {
               clearRectAtPoint(x, y);
-              startNode = undefined;
+              startNode = null;
             } else if (destNode && destNode.isAt(column, row)) {
               clearRectAtPoint(x, y);
-              destNode = undefined;
+              destNode = null;
             } else if (!startNode) {
               startNode = new Node(column, row);
               fillRectAtPoint(x, y, "rgba(0, 200, 0, 0.5)");
@@ -422,7 +459,10 @@
 
         fetch("./space.json")
           .then((resp) => resp.json())
-          .then((json) => drawSpace(json));
+          .then((json) => {
+            space = json;
+            drawSpace(json);
+          });
       }
     </script>
   </head>
