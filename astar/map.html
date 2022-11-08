@@ -57,6 +57,12 @@
           this.map.clear();
         }
 
+        print() {
+          this.map.forEach((n, k) => {
+            // console.log("node:", n.x, n.y);
+          });
+        }
+
         add(node) {
           this.map.set(node.key, node);
         }
@@ -87,12 +93,17 @@
         }
       }
 
-      const columns = 45;
-      const rows = 20;
-      const nodeSize = 30; // node size
-      const lineWidth = 1;
-      const startX = 10;
-      const startY = 10;
+      let columns = 45;
+      let rows = 20;
+      let nodeSize = 30; // node size
+      let lineWidth = 1;
+      let startX = 10;
+      let startY = 10;
+
+      let spaceExtWidth = 0;
+      let spaceExtHeight = 0;
+      let spaceOffsetX = 0;
+      let spaceOffsetY = 0;
 
       const openSet = new NodeSet();
       const closeSet = new NodeSet();
@@ -102,7 +113,7 @@
       let destNode;
       let found = false;
       function searchPath() {
-        draw(columns, rows);
+        draw();
 
         const astarBtn = document.getElementById("Astar");
         astarBtn.onclick = (e) => {
@@ -150,6 +161,10 @@
         openSet.add(startNode);
 
         while (true) {
+          // // console.log("openset:");
+          // openSet.print();
+          // // console.log("closeset:");
+          // closeSet.print();
           let node = openSet.pop();
           if (!node) return false;
           closeSet.add(node);
@@ -159,6 +174,7 @@
           }
           node.neighborCoords().forEach((coord) => {
             const k = `${coord[0]},${coord[1]}`;
+            // console.log("k:", k, columns, rows);
             let nb;
             if (
               coord[0] < 0 ||
@@ -166,15 +182,20 @@
               coord[1] < 0 ||
               coord[1] >= rows
             ) {
+              // console.log("1");
             } else if (!isOkToMove(node.x, node.y, coord[0], coord[1])) {
+              // console.log("2");
             } else if ((nb = closeSet.get(k))) {
+              // console.log("3");
             } else if ((nb = openSet.get(k))) {
+              // console.log("4");
               const d = neighborDistance(node, nb);
               if (node.pathD + d < nb.pathD) {
                 nb.parent = node;
                 nb.pathD = node.pathD + d;
               }
             } else {
+              // console.log("5");
               nb = new Node(coord[0], coord[1]);
               const d = neighborDistance(node, nb);
               nb.pathD = node.pathD + d;
@@ -239,19 +260,65 @@
         );
       }
 
-      function draw(columns, rows) {
+      function draw() {
         const canvas = document.getElementById("map");
         if (!canvas.getContext) {
           console.error("canvas not supported!");
         }
 
-        canvas.width = startX + nodeSize * columns + lineWidth;
-        canvas.height = startY + nodeSize * rows + lineWidth;
-
         const ctx = canvas.getContext("2d");
         ctx.lineWidth = lineWidth;
 
+        function drawSpace(space) {
+          const rooms = space.rooms;
+          let minX = Infinity;
+          let minY = Infinity;
+          let maxX = -Infinity;
+          let maxY = -Infinity;
+
+          rooms.forEach((room) => {
+            minX = Math.min(minX, room.x);
+            minY = Math.min(minY, room.y);
+            maxX = Math.max(maxX, room.x + room.w);
+            maxY = Math.max(maxY, room.y + room.h);
+          });
+
+          maxX += spaceExtWidth / 2;
+          minX -= spaceExtWidth / 2;
+          maxY += spaceExtHeight / 2;
+          minY -= spaceExtHeight / 2;
+          spaceOffsetX = startX - minX;
+          spaceOffsetY = startY - minY;
+          columns = (maxX - minX) / space.unit;
+          rows = (maxY - minY) / space.unit;
+          nodeSize = space.unit;
+
+          drawGrid(ctx, startX, startY, columns, rows, nodeSize);
+
+          rooms.forEach((room) => {
+            room.items.forEach((item) => {
+              if (
+                item.kind === "horizontal wall" ||
+                item.kind == "vertical wall"
+              ) {
+                const rows = item.h / space.unit;
+                const columns = item.w / space.unit;
+                const offsetR = (item.x - minX) / space.unit;
+                const offsetC = (item.y - minY) / space.unit;
+                for (let r = 0; r < rows; r++) {
+                  for (let c = 0; c < columns; c++) {
+                    setObstacleNode(offsetC + c, offsetR + r);
+                  }
+                }
+              }
+            });
+          });
+        }
+
         function drawGrid(ctx, x, y, columns, rows, nodeSize) {
+          canvas.width = startX + nodeSize * columns + lineWidth;
+          canvas.height = startY + nodeSize * rows + lineWidth;
+
           const maxX = x + columns * nodeSize;
           const maxY = y + rows * nodeSize;
           ctx.beginPath();
@@ -285,6 +352,26 @@
           );
         }
 
+        function setObstacleNode(column, row) {
+          const x = column * nodeSize + startX;
+          const y = row * nodeSize + startY;
+          if (
+            (startNode && startNode.isAt(column, row)) ||
+            (destNode && destNode.isAt(column, row))
+          ) {
+            return;
+          }
+
+          const node = new Node(column, row);
+          if (obstacleSet.has(node)) {
+            clearRectAtPoint(x, y);
+            obstacleSet.delete(node);
+          } else {
+            fillRectAtPoint(x, y, "rgba(0, 0, 200, 0.5)");
+            obstacleSet.add(node);
+          }
+        }
+
         function click(e) {
           if (found) {
             alert("请刷新页面重新开始，或清除路径");
@@ -293,31 +380,23 @@
           if (e.shiftKey) {
             shiftclick(e);
           } else {
-            const column = Math.floor((e.clientX - startX) / nodeSize);
-            const row = Math.floor((e.clientY - startY) / nodeSize);
-            const x = column * nodeSize + startX;
-            const y = row * nodeSize + startY;
-            if (
-              (startNode && startNode.isAt(column, row)) ||
-              (destNode && destNode.isAt(column, row))
-            ) {
-              return;
-            }
-
-            const node = new Node(column, row);
-            if (obstacleSet.has(node)) {
-              clearRectAtPoint(x, y);
-              obstacleSet.delete(node);
-            } else {
-              fillRectAtPoint(x, y, "rgba(0, 0, 200, 0.5)");
-              obstacleSet.add(node);
-            }
+            const column = Math.floor(
+              (e.clientX + window.scrollX - startX) / nodeSize
+            );
+            const row = Math.floor(
+              (e.clientY + window.scrollY - startY) / nodeSize
+            );
+            setObstacleNode(column, row);
           }
         }
 
         function shiftclick(e) {
-          const column = Math.floor((e.clientX - startX) / nodeSize);
-          const row = Math.floor((e.clientY - startY) / nodeSize);
+          const column = Math.floor(
+            (e.clientX + window.scrollX - startX) / nodeSize
+          );
+          const row = Math.floor(
+            (e.clientY + window.scrollY - startY) / nodeSize
+          );
           const x = column * nodeSize + startX;
           const y = row * nodeSize + startY;
           const node = new Node(column, row);
@@ -338,8 +417,12 @@
           }
         }
 
-        drawGrid(ctx, startX, startY, columns, rows, nodeSize);
+        // drawGrid(ctx, startX, startY, columns, rows, nodeSize);
         canvas.addEventListener("click", click);
+
+        fetch("./space.json")
+          .then((resp) => resp.json())
+          .then((json) => drawSpace(json));
       }
     </script>
   </head>

@@ -1,0 +1,303 @@
+{
+  "background": {
+    "image": "floor/simple_floor_01_440x440",
+    "pattern": { "h": 100, "w": 100, "x": 0, "y": 0 }
+  },
+  "created_at": "2022-10-27T02:21:23Z",
+  "id": "9wedk0xo0nr6lh0v",
+  "name": "doorway-metaverse",
+  "rooms": [
+    {
+      "background": {
+        "image": "carpet/simple_carpet_02_500x500",
+        "pattern": { "h": 50, "w": 50, "x": -50, "y": -280 }
+      },
+      "h": 600,
+      "id": "wu88fj",
+      "items": [
+        {
+          "background": { "color": "#000" },
+          "h": 20,
+          "id": "vbry6",
+          "kind": "horizontal wall",
+          "w": 210,
+          "x": 390,
+          "y": -190
+        },
+        {
+          "background": { "color": "#000" },
+          "h": 20,
+          "id": "9up82",
+          "kind": "horizontal wall",
+          "w": 440,
+          "x": 760,
+          "y": -190
+        },
+        {
+          "background": { "color": "#000" },
+          "h": 580,
+          "id": "52qky",
+          "kind": "vertical wall",
+          "w": 20,
+          "x": 1180,
+          "y": -170
+        },
+        {
+          "background": { "color": "#000" },
+          "h": 20,
+          "id": "868byk",
+          "kind": "horizontal wall",
+          "w": 490,
+          "x": 390,
+          "y": 390
+        },
+        {
+          "background": { "image": "table/simple_table_01_90x50" },
+          "h": 50,
+          "id": "9w9d1",
+          "kind": "table",
+          "w": 90,
+          "x": 470,
+          "y": -20
+        },
+        {
+          "background": { "image": "chair/simple_chair_02_30x30" },
+          "h": 30,
+          "id": "iun14",
+          "kind": "chair",
+          "w": 30,
+          "x": 480,
+          "y": -60
+        },
+        {
+          "background": { "image": "chair/simple_chair_02_30x30" },
+          "h": 30,
+          "id": "7e3jkl",
+          "kind": "chair",
+          "w": 30,
+          "x": 530,
+          "y": -60
+        },
+        {
+          "background": { "image": "table/simple_table_02_120x70" },
+          "h": 70,
+          "id": "za2nhi",
+          "kind": "table",
+          "w": 120,
+          "x": 850,
+          "y": -30
+        },
+        {
+          "background": { "image": "chair/simple_chair_01_40x40" },
+          "h": 40,
+          "id": "yi3be",
+          "kind": "chair",
+          "w": 40,
+          "x": 870,
+          "y": -80
+        },
+        {
+          "background": { "image": "chair/simple_chair_01_40x40" },
+          "h": 40,
+          "id": "nwv73j",
+          "kind": "chair",
+          "w": 40,
+          "x": 930,
+          "y": -80
+        },
+        {
+          "background": { "image": "plant/simple_plant_01_20x20" },
+          "h": 20,
+          "id": "vzffn",
+          "kind": "plant",
+          "w": 20,
+          "x": 900,
+          "y": -10
+        },
+        {
+          "background": { "image": "plant/simple_plant_01_20x30" },
+          "h": 30,
+          "id": "fzhzu",
+          "kind": "plant",
+          "w": 20,
+          "x": 510,
+          "y": -10
+        },
+        {
+          "background": { "image": "plant/simple_plant_01_60x30" },
+          "h": 30,
+          "id": "2tyd4",
+          "kind": "plant",
+          "w": 60,
+          "x": 1110,
+          "y": -160
+        },
+        {
+          "background": { "image": "table/simple_table_03_270x90" },
+          "h": 90,
+          "id": "26uok",
+          "kind": "table",
+          "w": 270,
+          "x": 560,
+          "y": 140
+        },
+        {
+          "background": { "image": "chair/simple_chair_02_30x30" },
+          "h": 30,
+          "id": "h8ftm",
+          "kind": "chair",
+          "w": 30,
+          "x": 600,
+          "y": 100
+        },
+        {
+          "background": { "image": "chair/simple_chair_03_30x30" },
+          "h": 30,
+          "id": "132sp",
+          "kind": "chair",
+          "w": 30,
+          "x": 600,
+          "y": 240
+        },
+        {
+          "background": { "image": "chair/simple_chair_02_30x30" },
+          "h": 30,
+          "id": "8sq37",
+          "kind": "chair",
+          "w": 30,
+          "x": 750,
+          "y": 100
+        },
+        {
+          "background": { "image": "chair/simple_chair_03_30x30" },
+          "h": 30,
+          "id": "20p7e",
+          "kind": "chair",
+          "w": 30,
+          "x": 750,
+          "y": 240
+        }
+      ],
+      "kind": "common room",
+      "w": 810,
+      "x": 390,
+      "y": -190
+    },
+    {
+      "background": {
+        "image": "carpet/simple_carpet_02_500x500",
+        "pattern": { "h": 50, "w": 50, "x": -50, "y": -300 }
+      },
+      "h": 460,
+      "id": "pwmc2",
+      "items": [
+        {
+          "background": { "image": "table/simple_table_01_90x50" },
+          "h": 50,
+          "id": "1tlqk",
+          "kind": "table",
+          "w": 90,
+          "x": 730,
+          "y": 560
+        },
+        {
+          "background": { "image": "table/simple_table_01_90x50" },
+          "h": 50,
+          "id": "tzbtd",
+          "kind": "table",
+          "w": 90,
+          "x": 990,
+          "y": 560
+        },
+        {
+          "background": { "image": "table/simple_table_02_120x70" },
+          "h": 70,
+          "id": "0j06b",
+          "kind": "table",
+          "w": 120,
+          "x": 860,
+          "y": 720
+        },
+        {
+          "background": { "image": "chair/simple_chair_02_30x30" },
+          "h": 30,
+          "id": "kss6af",
+          "kind": "chair",
+          "w": 30,
+          "x": 760,
+          "y": 520
+        },
+        {
+          "background": { "image": "chair/simple_chair_02_30x30" },
+          "h": 30,
+          "id": "h600s",
+          "kind": "chair",
+          "w": 30,
+          "x": 1030,
+          "y": 520
+        },
+        {
+          "background": { "image": "chair/simple_chair_03_30x30" },
+          "h": 30,
+          "id": "6z9jb",
+          "kind": "chair",
+          "w": 30,
+          "x": 880,
+          "y": 800
+        },
+        {
+          "background": { "image": "chair/simple_chair_03_30x30" },
+          "h": 30,
+          "id": "fhj4i",
+          "kind": "chair",
+          "w": 30,
+          "x": 940,
+          "y": 800
+        },
+        {
+          "background": { "image": "chair/simple_chair_01_40x40" },
+          "h": 40,
+          "id": "qwy44",
+          "kind": "chair",
+          "w": 40,
+          "x": 900,
+          "y": 670
+        },
+        {
+          "background": { "image": "plant/simple_plant_01_20x20" },
+          "h": 20,
+          "id": "x407q",
+          "kind": "plant",
+          "w": 20,
+          "x": 620,
+          "y": 860
+        },
+        {
+          "background": { "image": "plant/simple_plant_01_20x30" },
+          "h": 30,
+          "id": "35uml",
+          "kind": "plant",
+          "w": 20,
+          "x": 910,
+          "y": 740
+        },
+        {
+          "background": { "image": "plant/simple_plant_01_60x30" },
+          "h": 30,
+          "id": "gxbma",
+          "kind": "plant",
+          "w": 60,
+          "x": 1180,
+          "y": 870
+        }
+      ],
+      "kind": "common room",
+      "w": 720,
+      "x": 550,
+      "y": 480
+    }
+  ],
+  "tid": "doorway",
+  "unit": 10,
+  "updated_at": "2022-11-03T07:50:40Z"
+}
