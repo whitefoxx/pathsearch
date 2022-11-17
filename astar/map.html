@@ -37,9 +37,16 @@
 
           // 这里是为了demo演示的方便，如此调用，实际调用为：
           // astar_search(space, fromPosition, toPosition)
-          const { obstacleSet } = parseSpace(space);
-          paths = do_astar_search(space, obstacleSet, startNode, destNode);
-          console.log("paths:", paths);
+          const { obstacleSet, rows, columns } = parseSpace(space);
+          paths = do_astar_search(
+            space,
+            obstacleSet,
+            rows,
+            columns,
+            startNode,
+            destNode
+          );
+          console.log("move path:", paths);
 
           if (paths) {
             let node = destNode.parent;
@@ -206,7 +213,7 @@
           const x = column * nodeSize + startX;
           const y = row * nodeSize + startY;
           const node = new Node(column, row);
-          if (!obstacleSet.has(node)) {
+          if (true || !obstacleSet.has(node)) {
             if (startNode && startNode.isAt(column, row)) {
               clearRectAtPoint(x, y);
               startNode = null;
@@ -226,7 +233,12 @@
         // drawGrid(ctx, startX, startY, columns, rows, nodeSize);
         canvas.addEventListener("click", click);
 
-        fetch("https://api.doorway.work/meta-test/teams/doorway/space")
+        const token = "hcgi9kn6ysmdfm9f3d4bcnxfgporuy2o";
+        fetch("https://api.doorway.work/meta-test/teams/doorway/space", {
+          headers: {
+            Authorization: "Token " + token,
+          },
+        })
           .then((resp) => resp.json())
           .then((json) => {
             space = json;

@@ -126,7 +126,7 @@ function parseSpace(space) {
 }
 
 function astar_search(space, fromPosition, toPosition) {
-  const { originX, originY, obstacleSet } = parseSpace(space);
+  const { originX, originY, obstacleSet, rows, columns } = parseSpace(space);
   const fromX = Math.floor((fromPosition.x - originX) / space.unit);
   const fromY = Math.floor((fromPosition.y - originY) / space.unit);
   const toX = Math.floor((toPosition.x - originX) / space.unit);
@@ -134,10 +134,10 @@ function astar_search(space, fromPosition, toPosition) {
   const fromNode = new Node(fromX, fromY);
   const toNode = new Node(toX, toY);
 
-  return do_astar_search(space, obstacleSet, fromNode, toNode);
+  return do_astar_search(space, obstacleSet, rows, columns, fromNode, toNode);
 }
 
-function do_astar_search(space, obstacleSet, fromNode, toNode) {
+function do_astar_search(space, obstacleSet, rows, columns, fromNode, toNode) {
   const openSet = new NodeSet();
   const closeSet = new NodeSet();
 
@@ -146,9 +146,21 @@ function do_astar_search(space, obstacleSet, fromNode, toNode) {
   fromNode.heuristicD = heuristic(fromNode, toNode);
   openSet.add(fromNode);
 
+  let pass = false;
   while (true) {
     let node = openSet.pop();
-    if (!node) return null;
+    if (!node) {
+      if (pass) return null;
+      pass = true;
+      // try again
+      openSet.clear();
+      closeSet.clear();
+      fromNode.parent = null;
+      fromNode.pathD = 0;
+      fromNode.heuristicD = heuristic(fromNode, toNode);
+      openSet.add(fromNode);
+      continue;
+    }
     closeSet.add(node);
     if (node.equal(toNode)) {
       toNode.parent = node.parent;
@@ -181,26 +193,42 @@ function do_astar_search(space, obstacleSet, fromNode, toNode) {
       paths.reverse();
       return paths;
     }
-    node.neighborCoords().forEach((coord) => {
-      const k = `${coord[0]},${coord[1]}`;
-      let nb;
-      if (!isOkToMove(obstacleSet, node.x, node.y, coord[0], coord[1])) {
-      } else if ((nb = closeSet.get(k))) {
-      } else if ((nb = openSet.get(k))) {
-        const d = neighborDistance(node, nb);
-        if (node.pathD + d < nb.pathD) {
-          nb.parent = node;
+    let stuck = false;
+    for (let i = 0; i < 2; i++) {
+      let hitN = 0;
+      node.neighborCoords().forEach((coord) => {
+        const k = `${coord[0]},${coord[1]}`;
+        let nb;
+        if (
+          !stuck &&
+          !pass &&
+          !isOkToMove(obstacleSet, node.x, node.y, coord[0], coord[1])
+        ) {
+          hitN++;
+        } else if ((nb = closeSet.get(k))) {
+        } else if ((nb = openSet.get(k))) {
+          const d = neighborDistance(node, nb);
+          if (node.pathD + d < nb.pathD) {
+            nb.parent = node;
+            nb.pathD = node.pathD + d;
+          }
+        } else if (
+          coord[0] >= 0 &&
+          coord[0] < columns &&
+          coord[1] < rows &&
+          coord[1] >= 0
+        ) {
+          nb = new Node(coord[0], coord[1]);
+          const d = neighborDistance(node, nb);
           nb.pathD = node.pathD + d;
+          nb.heuristicD = heuristic(nb, toNode);
+          nb.parent = node;
+          openSet.add(nb);
         }
-      } else {
-        nb = new Node(coord[0], coord[1]);
-        const d = neighborDistance(node, nb);
-        nb.pathD = node.pathD + d;
-        nb.heuristicD = heuristic(nb, toNode);
-        nb.parent = node;
-        openSet.add(nb);
-      }
-    });
+      });
+      if (hitN < 8) break;
+      else stuck = true;
+    }
   }
 }
 
