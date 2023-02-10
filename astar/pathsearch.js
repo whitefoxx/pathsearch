@@ -15,15 +15,15 @@ class Node {
   }
 
   isAt(x, y) {
-    return this.x == x && this.y == y;
+    return this.x === x && this.y === y;
   }
 
   equal(node) {
-    return this.x == node.x && this.y == node.y;
+    return this.x === node.x && this.y === node.y;
   }
 
   neighborCoords() {
-    const coords = new Array();
+    const coords = [];
     coords.push([this.x - 1, this.y - 1]);
     coords.push([this.x, this.y - 1]);
     coords.push([this.x + 1, this.y - 1]);
@@ -75,7 +75,7 @@ class NodeSet {
   }
 }
 
-function parseSpace(space) {
+function parseSpace(space, fromPosition, toPosition) {
   const rooms = space.rooms;
   let minX = Infinity;
   let minY = Infinity;
@@ -88,31 +88,50 @@ function parseSpace(space) {
     maxX = Math.max(maxX, room.x + room.w);
     maxY = Math.max(maxY, room.y + room.h);
   });
+  minX = Math.min(minX, fromPosition.x, toPosition.x);
+  minY = Math.min(minY, fromPosition.y, toPosition.y);
+  maxX = Math.max(maxX, fromPosition.x, toPosition.x);
+  maxY = Math.max(maxY, fromPosition.y, toPosition.y);
 
   maxX += space.unit;
   minX -= space.unit;
   maxY += space.unit;
   minY -= space.unit;
 
-  const columns = (maxX - minX) / space.unit;
-  const rows = (maxY - minY) / space.unit;
+  const columns = Math.ceil((maxX - minX) / space.unit);
+  const rows = Math.ceil((maxY - minY) / space.unit);
   const obstacleSet = new NodeSet();
-  const originX = minX;
-  const originY = minY;
+  const originX = Math.floor(minX / space.unit) * space.unit;
+  const originY = Math.floor(minY / space.unit) * space.unit;
   rooms.forEach((room) => {
     room.items.forEach((item) => {
-      if (item.kind === "horizontal wall" || item.kind == "vertical wall") {
-        const rs = item.h / space.unit;
-        const cs = item.w / space.unit;
-        const offsetC = Math.floor((item.x - originX) / space.unit);
-        const offsetR = Math.floor((item.y - originY) / space.unit);
+      let projections = [];
+      if (item.projections === undefined) {
+        projections.push({
+          x: 0,
+          y: 0,
+          w: item.w,
+          h: item.h,
+        });
+      } else if (item.projections !== null) {
+        projections = item.projections;
+      }
+      projections.forEach((projection) => {
+        const rs = projection.h / space.unit;
+        const cs = projection.w / space.unit;
+        const offsetC = Math.floor(
+          (item.x + projection.x - originX) / space.unit
+        );
+        const offsetR = Math.floor(
+          (item.y + projection.y - originY) / space.unit
+        );
         for (let r = 0; r < rs; r++) {
           for (let c = 0; c < cs; c++) {
             const node = new Node(offsetC + c, offsetR + r);
             obstacleSet.add(node);
           }
         }
-      }
+      });
     });
   });
 
@@ -125,19 +144,59 @@ function parseSpace(space) {
   };
 }
 
-function astar_search(space, fromPosition, toPosition) {
-  const { originX, originY, obstacleSet, rows, columns } = parseSpace(space);
+function astarSearch(space, fromPosition, toPosition) {
+  const { originX, originY, obstacleSet, rows, columns } = parseSpace(
+    space,
+    fromPosition,
+    toPosition
+  );
   const fromX = Math.floor((fromPosition.x - originX) / space.unit);
   const fromY = Math.floor((fromPosition.y - originY) / space.unit);
   const toX = Math.floor((toPosition.x - originX) / space.unit);
   const toY = Math.floor((toPosition.y - originY) / space.unit);
   const fromNode = new Node(fromX, fromY);
   const toNode = new Node(toX, toY);
-
-  return do_astar_search(space, obstacleSet, rows, columns, fromNode, toNode);
+  const offsetX =
+    ((toPosition.x - originX) % space.unit) -
+    ((fromPosition.x - originX) % space.unit);
+  const offsetY =
+    ((toPosition.y - originY) % space.unit) -
+    ((fromPosition.y - originY) % space.unit);
+  const paths = doAstarSearch(
+    space,
+    obstacleSet,
+    rows,
+    columns,
+    fromNode,
+    toNode,
+    offsetX,
+    offsetY
+  );
+  if (paths) {
+    let x = fromPosition.x;
+    let y = fromPosition.y;
+    paths.forEach((s) => {
+      x += s[0];
+      y += s[1];
+    });
+    console.assert(
+      x === toPosition.x && y === toPosition.y,
+      "search path failed!!"
+    );
+  }
+  return paths;
 }
 
-function do_astar_search(space, obstacleSet, rows, columns, fromNode, toNode) {
+function doAstarSearch(
+  space,
+  obstacleSet,
+  rows,
+  columns,
+  fromNode,
+  toNode,
+  offsetX,
+  offsetY
+) {
   const openSet = new NodeSet();
   const closeSet = new NodeSet();
 
@@ -165,7 +224,7 @@ function do_astar_search(space, obstacleSet, rows, columns, fromNode, toNode) {
     if (node.equal(toNode)) {
       toNode.parent = node.parent;
       let dx, dy, pRatio, cRatio, pNode;
-      const paths = new Array();
+      const paths = [];
       pNode = null;
       while (node.parent) {
         dy = node.y - node.parent.y;
@@ -190,6 +249,7 @@ function do_astar_search(space, obstacleSet, rows, columns, fromNode, toNode) {
           (pNode.y - node.y) * space.unit,
         ]);
       }
+      paths.push([offsetX, offsetY]);
       paths.reverse();
       return paths;
     }
@@ -205,6 +265,7 @@ function do_astar_search(space, obstacleSet, rows, columns, fromNode, toNode) {
           !isOkToMove(obstacleSet, node.x, node.y, coord[0], coord[1])
         ) {
           hitN++;
+          // eslint-disable-next-line no-empty
         } else if ((nb = closeSet.get(k))) {
         } else if ((nb = openSet.get(k))) {
           const d = neighborDistance(node, nb);
@@ -236,7 +297,7 @@ function isOkToMove(obstacleSet, x1, y1, x2, y2) {
   const k = `${x2},${y2}`;
   if (obstacleSet.get(k)) return false;
   const d = Math.abs(x1 - x2) + Math.abs(y1 - y2);
-  if (d == 1) return true;
+  if (d === 1) return true;
   if (d > 2) return false;
   const k1 = `${x1},${y2}`;
   const k2 = `${x2},${y1}`;

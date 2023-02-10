@@ -18,6 +18,8 @@
       let startX = 10;
       let startY = 10;
 
+      const fromPosition = { x: 0, y: 0 };
+      const toPosition = { x: 0, y: 0 };
       let space;
       let obstacleSet;
 
@@ -36,15 +38,16 @@
           }
 
           // 这里是为了demo演示的方便，如此调用，实际调用为：
-          // astar_search(space, fromPosition, toPosition)
-          const { obstacleSet, rows, columns } = parseSpace(space);
-          paths = do_astar_search(
+          // paths = astarSearch(space, fromPosition, toPosition);
+          paths = doAstarSearch(
             space,
             obstacleSet,
             rows,
             columns,
             startNode,
-            destNode
+            destNode,
+            0,
+            0
           );
           console.log("move path:", paths);
 
@@ -115,7 +118,7 @@
         ctx.lineWidth = lineWidth;
 
         function drawSpace(space) {
-          const r = parseSpace(space);
+          const r = parseSpace(space, fromPosition, toPosition);
           obstacleSet = r.obstacleSet;
           columns = r.columns;
           rows = r.rows;
@@ -233,8 +236,8 @@
         // drawGrid(ctx, startX, startY, columns, rows, nodeSize);
         canvas.addEventListener("click", click);
 
-        const token = "hcgi9kn6ysmdfm9f3d4bcnxfgporuy2o";
-        fetch("https://api.doorway.work/meta-test/teams/doorway/space", {
+        const token = "runqicqvnh095f67tetwr5xbrpa7n8pk";
+        fetch("http://127.0.0.1:5500/astar/space.json", {
           headers: {
             Authorization: "Token " + token,
           },
