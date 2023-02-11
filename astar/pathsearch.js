@@ -205,12 +205,32 @@ function doAstarSearch(
   fromNode.heuristicD = heuristic(fromNode, toNode);
   openSet.add(fromNode);
 
-  let pass = false;
+  let realToNode = null; // if the toNode is surrounded by obstacle nodes
+  let finalPath = null; // final path to the real toNode
+
   while (true) {
     let node = openSet.pop();
     if (!node) {
-      if (pass) return null;
-      pass = true;
+      if (realToNode) return null;
+
+      // find the closest fake toNode which is not a obstacle node
+      const m = toNode.y < fromNode.y ? 1 : -1;
+      realToNode = toNode;
+      let pNode = toNode;
+      let y = toNode.y + m;
+      while (true) {
+        const node = new Node(toNode.x, y);
+        pNode.parent = node;
+        pNode = node;
+        const k = `${toNode.x},${y}`;
+        if (!obstacleSet.get(k)) {
+          toNode = node;
+          finalPath = [0, m * (toNode.y - realToNode.y)];
+          break;
+        }
+        y += m;
+      }
+
       // try again
       openSet.clear();
       closeSet.clear();
@@ -249,6 +269,12 @@ function doAstarSearch(
           (pNode.y - node.y) * space.unit,
         ]);
       }
+
+      // add the final path from the fake toNode to the realToNode
+      if (realToNode) {
+        paths.push(finalPath);
+      }
+
       paths.push([offsetX, offsetY]);
       paths.reverse();
       return paths;
@@ -261,7 +287,6 @@ function doAstarSearch(
         let nb;
         if (
           !stuck &&
-          !pass &&
           !isOkToMove(obstacleSet, node.x, node.y, coord[0], coord[1])
         ) {
           hitN++;
